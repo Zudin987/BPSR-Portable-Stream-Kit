@@ -1,0 +1,24 @@
+# Build output
+bin/
+obj/
+publish/
+artifacts/
+
+# Portable runtime downloaded by the launcher
+OBS/
+.cache/
+config-backup/
+
+# User/local secrets
+**/service.json
+**/*streamkey*
+**/*token*
+*.user
+*.suo
+.vs/
+
+# OS/editor
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
