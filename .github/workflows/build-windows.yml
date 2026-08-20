@@ -1,0 +1,62 @@
+name: Build Windows Stream Kit
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/BPSRStreamKit/BPSRStreamKit.csproj
+
+      - name: Publish self-contained launcher
+        run: dotnet publish src/BPSRStreamKit/BPSRStreamKit.csproj -c Release -r win-x64 --self-contained true -o publish
+
+      - name: Add release notes
+        shell: pwsh
+        run: |
+          Copy-Item README.md publish/README.md -Force
+          @"
+          BPSR Portable Stream Kit
+
+          1. Extract the whole ZIP.
+          2. Open BPSRStreamKit.exe.
+          3. Click Start Discord (recommended) or choose Twitch/TikTok.
+
+          The first launch downloads the pinned portable OBS/FloodTuber builds.
+          No normal OBS installation is required.
+          "@ | Set-Content publish/START_HERE.txt -Encoding UTF8
+
+      - name: Package ZIP
+        shell: pwsh
+        run: Compress-Archive -Path publish/* -DestinationPath BPSR-Portable-Stream-Kit-win-x64.zip -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BPSR-Portable-Stream-Kit-win-x64
+          path: BPSR-Portable-Stream-Kit-win-x64.zip
+          if-no-files-found: error
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" BPSR-Portable-Stream-Kit-win-x64.zip --generate-notes --title "BPSR Portable Stream Kit ${{ github.ref_name }}"
