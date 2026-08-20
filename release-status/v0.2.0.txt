@@ -1,0 +1,4 @@
+release=v0.2.0
+status=published
+commit=e61db274f1130ff808e8cd7bdefceac19cb1da64
+artifact=BPSR-Portable-Stream-Kit-win-x64.zip
