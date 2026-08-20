@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -103,7 +104,7 @@ public sealed class GameCatalogService
     {
         var results = new List<GameTarget>();
 
-        EnumWindows((hwnd, _) =>
+        EnumWindows((hwnd, lParam) =>
         {
             try
             {
