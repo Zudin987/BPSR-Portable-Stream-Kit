@@ -1,0 +1,12 @@
+FLOODTUBER AVATAR ASSETS
+========================
+
+Do NOT rename these unless you also remap them in FloodTuber.
+
+idle.png   -> normal / silent pose
+talk_a.png -> light talking
+talk_b.png -> stronger talking
+blink.png  -> blink expression
+action.png -> optional excited / hotkey expression
+
+The assets already have transparent backgrounds.

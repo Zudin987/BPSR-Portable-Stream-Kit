@@ -1,0 +1,6 @@
+Included frame assets:
+- 01_Minimal_Thin_1080p.png : recommended thin 1920x1080 whole-stream frame
+- 02_Sakura_Full_Overlay.png : ornate full overlay
+- 03_Showcase_Character_Overlay.png : showcase overlay with character art
+- 04_DPS_Panel.png : themed DPS/stats panel
+- 05_TikTok_Minimal_1080x1920.png : clean vertical frame for TikTok
