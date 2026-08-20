@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace BPSRStreamKit.Infrastructure;
 
 public static class AppPaths
