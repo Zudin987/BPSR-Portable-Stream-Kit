@@ -33,6 +33,30 @@ jobs:
       - name: Publish self-contained launcher
         run: dotnet publish src/BPSRStreamKit/BPSRStreamKit.csproj -c Release -r win-x64 --self-contained true -o publish
 
+      - name: Copy portable assets and templates
+        shell: pwsh
+        run: |
+          if (Test-Path publish/Assets) { Remove-Item publish/Assets -Recurse -Force }
+          if (Test-Path publish/templates) { Remove-Item publish/templates -Recurse -Force }
+          Copy-Item -Path Assets -Destination publish/Assets -Recurse -Force
+          Copy-Item -Path templates -Destination publish/templates -Recurse -Force
+
+          $required = @(
+            'publish/Assets/Frames/01_Minimal_Thin_1080p.png',
+            'publish/Assets/Screens/Starting_1080p.png',
+            'publish/Assets/Screens/BRB_1080p.png',
+            'publish/Assets/MyAvatar/idle.png',
+            'publish/Assets/MyAvatar/talk_a.png',
+            'publish/Assets/MyAvatar/talk_b.png',
+            'publish/templates/basic/scenes/BPSR_Horizontal.json'
+          )
+
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) {
+              throw "Required release file is missing: $file"
+            }
+          }
+
       - name: Add release notes
         shell: pwsh
         run: |
@@ -51,6 +75,31 @@ jobs:
       - name: Package ZIP
         shell: pwsh
         run: Compress-Archive -Path publish/* -DestinationPath BPSR-Portable-Stream-Kit-win-x64.zip -Force
+
+      - name: Verify packaged ZIP
+        shell: pwsh
+        run: |
+          $checkDir = Join-Path $env:RUNNER_TEMP 'bpsr-package-check'
+          if (Test-Path $checkDir) { Remove-Item $checkDir -Recurse -Force }
+          Expand-Archive BPSR-Portable-Stream-Kit-win-x64.zip -DestinationPath $checkDir -Force
+
+          $required = @(
+            'Assets/Frames/01_Minimal_Thin_1080p.png',
+            'Assets/Screens/Starting_1080p.png',
+            'Assets/Screens/BRB_1080p.png',
+            'Assets/MyAvatar/idle.png',
+            'Assets/MyAvatar/talk_a.png',
+            'Assets/MyAvatar/talk_b.png',
+            'templates/basic/scenes/BPSR_Horizontal.json',
+            'BPSRStreamKit.exe'
+          )
+
+          foreach ($relative in $required) {
+            $file = Join-Path $checkDir $relative
+            if (-not (Test-Path $file)) {
+              throw "Packaged ZIP verification failed. Missing: $relative"
+            }
+          }
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
