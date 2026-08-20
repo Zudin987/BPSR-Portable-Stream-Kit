@@ -1,8 +1,12 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
+using BPSRStreamKit.Infrastructure;
 using BPSRStreamKit.Models;
 using BPSRStreamKit.Services;
 
@@ -13,16 +17,31 @@ public partial class MainWindow : Window
     private readonly DetectionService _detection = new();
     private readonly SetupService _setup = new();
     private readonly ObsService _obs = new();
+    private readonly GameCatalogService _catalog = new();
+    private readonly DispatcherTimer _statusTimer;
+
+    private StreamTarget _selectedTarget = StreamTarget.Discord;
     private bool _busy;
+    private bool _loadingGames;
+
+    private GameTarget? SelectedGame => GameCombo.SelectedItem as GameTarget;
 
     public MainWindow()
     {
         InitializeComponent();
+        _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _statusTimer.Tick += async (_, _) =>
+        {
+            if (!_busy) await RefreshStatusAsync();
+        };
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        ApplyPlatformSelection();
+        await RefreshGameChoicesAsync(preserveSelection: false);
         await RefreshStatusAsync();
+        _statusTimer.Start();
     }
 
     private void Window_SourceInitialized(object? sender, EventArgs e)
@@ -33,147 +52,270 @@ public partial class MainWindow : Window
             var enabled = 1;
             _ = DwmSetWindowAttribute(hwnd, 20, ref enabled, sizeof(int));
         }
-        catch
+        catch { }
+    }
+
+    private async Task RefreshGameChoicesAsync(bool preserveSelection)
+    {
+        var previous = preserveSelection ? SelectedGame?.ProcessName : _catalog.GetLastSelectedProcess();
+        _loadingGames = true;
+        try
         {
-            // Dark title-bar support is cosmetic; never block the launcher because of it.
+            var choices = await _catalog.GetGameChoicesAsync();
+            GameCombo.ItemsSource = choices;
+
+            var selected = !string.IsNullOrWhiteSpace(previous)
+                ? choices.FirstOrDefault(x => x.ProcessName.Equals(previous, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+            GameCombo.SelectedItem = selected ?? choices.FirstOrDefault();
         }
+        finally
+        {
+            _loadingGames = false;
+        }
+
+        UpdateGameCard();
     }
 
     private async Task RefreshStatusAsync()
     {
-        var state = await _detection.DetectAsync();
+        var state = await _detection.DetectAsync(SelectedGame);
         ApplyStatus(state);
     }
 
     private void ApplyStatus(DetectionState state)
     {
-        SetStatus(ObsStatusDot, ObsStatusText, state.ObsReady,
-            "OBS: ready", "OBS: one-time setup needed");
-        SetStatus(GameStatusDot, GameStatusText, state.GameRunning,
-            "BPSR: running", "BPSR: not open");
-        SetStatus(LogsStatusDot, LogsStatusText, state.ResonanceLogsRunning,
-            "Resonance Logs: running", "Resonance Logs: not open");
+        var game = SelectedGame;
+        var gameName = game?.DisplayName ?? "Selected game";
 
-        if (!state.ObsReady)
+        SetStatus(GameStatusDot, GameStatusText, state.GameRunning,
+            $"{gameName} detected", $"Waiting for {gameName}");
+        SetStatus(ObsStatusDot, ObsStatusText, state.ObsReady,
+            "Portable engine ready", "Stream engine needs setup");
+        SetStatus(AvatarStatusDot, AvatarStatusText, state.AvatarReady,
+            "Avatar layer synced", "Avatar layer needs setup");
+        SetStatus(AudioStatusDot, AudioStatusText, state.AudioIsolationReady,
+            "Game + Mic isolated", "Audio sandbox needs setup");
+
+        if (!state.ObsReady || !state.AvatarReady)
         {
-            HeroTitle.Text = "Set up once, then just stream";
-            HeroSubtitle.Text = "Click Start Discord. The launcher will prepare portable OBS and FloodTuber automatically, without installing them into Windows.";
-            DiscordButton.Content = "Set up & start Discord";
-            FooterStatus.Text = "First run downloads the pinned portable OBS build from the official release.";
+            HeroEyebrow.Text = "SETUP REQUIRED";
+            HeroEyebrow.Foreground = (Brush)FindResource("WarnBrush");
+            HeroTitle.Text = "One click from ready";
+            HeroSubtitle.Text = "StreamKit will prepare its portable stream engine, avatar layer and private capture layout automatically.";
+            MainActionButton.Content = "Set up & " + GetActionLabel();
+            FooterStatus.Text = "First run setup stays inside this folder";
             return;
         }
 
-        DiscordButton.Content = "Start Discord";
+        MainActionButton.Content = GetActionLabel();
 
         if (!state.GameRunning)
         {
-            HeroTitle.Text = "Open BPSR, then you’re ready";
-            HeroSubtitle.Text = "The stream setup is ready. Open Blue Protocol: Star Resonance first so OBS can hook the game automatically.";
-            FooterStatus.Text = "OBS ready • waiting for BPSR";
+            HeroEyebrow.Text = "WAITING FOR GAME";
+            HeroEyebrow.Foreground = (Brush)FindResource("WarnBrush");
+            HeroTitle.Text = "Open your game";
+            HeroSubtitle.Text = game?.IsBpsr == true
+                ? "The stream engine is ready. Open Blue Protocol: Star Resonance and StreamKit will hook it automatically."
+                : $"Open {gameName}, then press Scan games if its window changed.";
+            FooterStatus.Text = "Private capture ready · waiting for game";
+            return;
         }
-        else if (!state.ResonanceLogsRunning)
+
+        HeroEyebrow.Text = "READY";
+        HeroEyebrow.Foreground = (Brush)FindResource("GoodBrush");
+        HeroTitle.Text = _selectedTarget switch
         {
-            HeroTitle.Text = "BPSR detected";
-            HeroSubtitle.Text = "You can stream now. Open Resonance Logs too if you want the DPS meter and Dungeon Mech HUD included.";
-            FooterStatus.Text = "OBS + BPSR ready • DPS/HUD optional";
+            StreamTarget.Discord => "Ready for Discord",
+            StreamTarget.Twitch => "Ready for Twitch",
+            StreamTarget.TikTok => "Ready for TikTok",
+            _ => "Ready to stream"
+        };
+
+        if (game?.IsBpsr == true)
+        {
+            HeroSubtitle.Text = state.ResonanceLogsRunning
+                ? "BPSR + Resonance Logs detected. Your full DPS/HUD layout is ready."
+                : "BPSR is detected. DPS and Dungeon HUD will appear when Resonance Logs is open.";
         }
         else
         {
-            HeroTitle.Text = "Ready to stream";
-            HeroSubtitle.Text = "BPSR and Resonance Logs are detected. Start Discord and the prepared scene will open with your saved layout.";
-            FooterStatus.Text = "Everything detected • no full-screen capture";
+            HeroSubtitle.Text = $"{gameName} will use the clean layout: game + frame + avatar. BPSR-only DPS/HUD sources stay hidden.";
         }
+
+        FooterStatus.Text = "Ready · no desktop capture · no Discord echo";
     }
 
-    private void SetStatus(Ellipse dot, System.Windows.Controls.TextBlock label, bool ready, string readyText, string missingText)
+    private void SetStatus(Ellipse dot, TextBlock label, bool ready, string readyText, string missingText)
     {
         dot.Fill = (Brush)FindResource(ready ? "GoodBrush" : "WarnBrush");
         label.Text = ready ? readyText : missingText;
         label.Foreground = (Brush)FindResource(ready ? "TextBrush" : "MutedBrush");
     }
 
-    private async Task StartAsync(StreamTarget target)
+    private async Task StartAsync()
     {
         if (_busy) return;
 
         try
         {
             SetBusy(true);
-            var state = await _detection.DetectAsync();
+            await RefreshGameChoicesAsync(preserveSelection: true);
+            var game = SelectedGame ?? throw new InvalidOperationException("Choose a game first.");
+            var state = await _detection.DetectAsync(game);
 
-            if (!state.ObsReady)
+            var showProgress = !state.ObsReady || !state.AvatarReady;
+            if (showProgress) SetupProgressPanel.Visibility = Visibility.Visible;
+
+            var progress = new Progress<(int Percent, string Message)>(value =>
             {
-                SetupProgressPanel.Visibility = Visibility.Visible;
-                var progress = new Progress<(int Percent, string Message)>(value =>
-                {
-                    SetupProgress.Value = value.Percent;
-                    SetupStatusText.Text = value.Message;
-                });
+                SetupProgress.Value = value.Percent;
+                SetupStatusText.Text = value.Message;
+            });
 
-                await _setup.EnsureReadyAsync(progress);
-            }
-
+            // This fast readiness pass also upgrades older installs with the clean-game scenes.
+            await _setup.EnsureReadyAsync(showProgress ? progress : null);
             SetupProgressPanel.Visibility = Visibility.Collapsed;
-            _obs.Launch(target);
 
-            FooterStatus.Text = target switch
+            state = await _detection.DetectAsync(game);
+            if (!state.GameRunning && !game.IsBpsr)
+                throw new InvalidOperationException($"{game.DisplayName} is not running. Open the game, then click Scan games.");
+
+            _catalog.Save(game);
+            _catalog.SaveLastSelectedProcess(game.ProcessName);
+            _obs.Launch(_selectedTarget, game);
+
+            FooterStatus.Text = _selectedTarget switch
             {
-                StreamTarget.Discord => "Discord scene opened • share the OBS Projector window in Discord",
-                StreamTarget.Twitch => "Twitch scene opened • connect your Twitch account in OBS once",
-                StreamTarget.TikTok => "TikTok vertical scene opened • add your local stream key/camera method in OBS",
+                StreamTarget.Discord => "OBS ready · share the OBS Projector window in Discord",
+                StreamTarget.Twitch => "Twitch layout opened · use OBS Start Streaming when your account is connected",
+                StreamTarget.TikTok => "TikTok vertical layout opened · use your local TikTok stream method in OBS",
                 _ => "OBS opened"
             };
-
-            await Task.Delay(350);
-            await RefreshStatusAsync();
         }
         catch (Exception ex)
         {
             SetupProgressPanel.Visibility = Visibility.Collapsed;
-            MessageBox.Show(
-                this,
-                $"The Stream Kit couldn't finish this step.\n\n{ex.Message}\n\nNothing was installed system-wide. You can use Settings → Repair setup and try again.",
-                "BPSR Stream Kit",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            FooterStatus.Text = "Setup needs attention";
+            MessageBox.Show(this,
+                $"StreamKit couldn't finish this step.\n\n{ex.Message}\n\nOpen Advanced → Repair if the problem continues.",
+                "StreamKit", MessageBoxButton.OK, MessageBoxImage.Warning);
+            FooterStatus.Text = "Needs attention · your existing settings were not erased";
         }
         finally
         {
             SetBusy(false);
+            await RefreshStatusAsync();
         }
+    }
+
+    private void ApplyPlatformSelection()
+    {
+        SetSegment(DiscordSegment, _selectedTarget == StreamTarget.Discord);
+        SetSegment(TwitchSegment, _selectedTarget == StreamTarget.Twitch);
+        SetSegment(TikTokSegment, _selectedTarget == StreamTarget.TikTok);
+        MainActionButton.Content = GetActionLabel();
+
+        ActionHint.Text = _selectedTarget switch
+        {
+            StreamTarget.Discord => "Game + Mic only · share OBS Projector in Discord",
+            StreamTarget.Twitch => "1080p60 · Game + Mic only",
+            StreamTarget.TikTok => "Vertical layout · Game + Mic only",
+            _ => "Game + Mic only"
+        };
+    }
+
+    private void SetSegment(Button button, bool selected)
+    {
+        button.Background = selected ? (Brush)FindResource("AccentGradient") : Brushes.Transparent;
+        button.Foreground = selected ? Brushes.White : (Brush)FindResource("MutedBrush");
+    }
+
+    private string GetActionLabel() => _selectedTarget switch
+    {
+        StreamTarget.Discord => "Start Discord Stream",
+        StreamTarget.Twitch => "Go Live on Twitch",
+        StreamTarget.TikTok => "Start TikTok Live",
+        _ => "Open Stream"
+    };
+
+    private void UpdateGameCard()
+    {
+        var game = SelectedGame;
+        GameLayoutText.Text = game?.LayoutLabel ?? "Choose a game";
+        PrivacyText.Text = game?.IsBpsr == true
+            ? "Only BPSR + your mic are captured. Desktop, browsers, Discord voices and notifications stay out."
+            : "Only the selected game + your mic are captured. BPSR DPS/HUD, desktop, browsers and Discord voices stay out.";
     }
 
     private void SetBusy(bool busy)
     {
         _busy = busy;
-        DiscordButton.IsEnabled = !busy;
-        TwitchButton.IsEnabled = !busy;
-        TikTokButton.IsEnabled = !busy;
+        MainActionButton.IsEnabled = !busy;
+        DiscordSegment.IsEnabled = !busy;
+        TwitchSegment.IsEnabled = !busy;
+        TikTokSegment.IsEnabled = !busy;
+        GameCombo.IsEnabled = !busy;
         Cursor = busy ? System.Windows.Input.Cursors.Wait : System.Windows.Input.Cursors.Arrow;
     }
 
-    private async void Discord_Click(object sender, RoutedEventArgs e) => await StartAsync(StreamTarget.Discord);
-    private async void Twitch_Click(object sender, RoutedEventArgs e) => await StartAsync(StreamTarget.Twitch);
-    private async void TikTok_Click(object sender, RoutedEventArgs e) => await StartAsync(StreamTarget.TikTok);
+    private async void MainAction_Click(object sender, RoutedEventArgs e) => await StartAsync();
+
+    private async void DiscordSegment_Click(object sender, RoutedEventArgs e)
+    {
+        _selectedTarget = StreamTarget.Discord;
+        ApplyPlatformSelection();
+        await RefreshStatusAsync();
+    }
+
+    private async void TwitchSegment_Click(object sender, RoutedEventArgs e)
+    {
+        _selectedTarget = StreamTarget.Twitch;
+        ApplyPlatformSelection();
+        await RefreshStatusAsync();
+    }
+
+    private async void TikTokSegment_Click(object sender, RoutedEventArgs e)
+    {
+        _selectedTarget = StreamTarget.TikTok;
+        ApplyPlatformSelection();
+        await RefreshStatusAsync();
+    }
+
+    private async void GameCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingGames) return;
+        UpdateGameCard();
+        if (SelectedGame is { } game)
+        {
+            _catalog.SaveLastSelectedProcess(game.ProcessName);
+            if (!game.IsBpsr) _catalog.Save(game);
+        }
+        await RefreshStatusAsync();
+    }
+
+    private async void ScanGames_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy) return;
+        await RefreshGameChoicesAsync(preserveSelection: true);
+        await RefreshStatusAsync();
+    }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
+        await RefreshGameChoicesAsync(preserveSelection: true);
         await RefreshStatusAsync();
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
-        AdvancedPanel.Visibility = AdvancedPanel.Visibility == Visibility.Visible
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        AdvancedPanel.Visibility = AdvancedPanel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private async void Repair_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
-
         try
         {
             SetBusy(true);
@@ -183,33 +325,35 @@ public partial class MainWindow : Window
                 SetupProgress.Value = value.Percent;
                 SetupStatusText.Text = value.Message;
             });
-
             await _setup.EnsureReadyAsync(progress, repair: true);
-            SetupProgressPanel.Visibility = Visibility.Collapsed;
-            FooterStatus.Text = "Setup checked • your saved scene positions and account settings were preserved";
-            await RefreshStatusAsync();
+            FooterStatus.Text = "Repair complete · scene positions and account settings preserved";
         }
         catch (Exception ex)
         {
-            SetupProgressPanel.Visibility = Visibility.Collapsed;
-            MessageBox.Show(this, ex.Message, "Repair setup", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, ex.Message, "Repair StreamKit", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
+            SetupProgressPanel.Visibility = Visibility.Collapsed;
             SetBusy(false);
+            await RefreshStatusAsync();
         }
     }
 
     private async void OpenObs_Click(object sender, RoutedEventArgs e)
     {
-        var state = await _detection.DetectAsync();
+        var state = await _detection.DetectAsync(SelectedGame);
         if (!state.ObsReady)
         {
-            await StartAsync(StreamTarget.PlainObs);
+            await StartAsync();
             return;
         }
-
         _obs.Launch(StreamTarget.PlainObs);
+    }
+
+    private void OpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        Process.Start(new ProcessStartInfo("explorer.exe", AppPaths.Root) { UseShellExecute = true });
     }
 
     [DllImport("dwmapi.dll")]
