@@ -43,18 +43,18 @@ jobs:
 
           $required = @(
             'publish/Assets/Frames/01_Minimal_Thin_1080p.png',
+            'publish/Assets/Frames/05_TikTok_Minimal_1080x1920.png',
             'publish/Assets/Screens/Starting_1080p.png',
             'publish/Assets/Screens/BRB_1080p.png',
             'publish/Assets/MyAvatar/idle.png',
             'publish/Assets/MyAvatar/talk_a.png',
             'publish/Assets/MyAvatar/talk_b.png',
-            'publish/templates/basic/scenes/BPSR_Horizontal.json'
+            'publish/templates/basic/scenes/BPSR_Horizontal.json',
+            'publish/templates/basic/scenes/BPSR_TikTok_Vertical.json'
           )
 
           foreach ($file in $required) {
-            if (-not (Test-Path $file)) {
-              throw "Required release file is missing: $file"
-            }
+            if (-not (Test-Path $file)) { throw "Required release file is missing: $file" }
           }
 
       - name: Add release notes
@@ -62,14 +62,16 @@ jobs:
         run: |
           Copy-Item README.md publish/README.md -Force
           @"
-          BPSR Portable Stream Kit
+          StreamKit v0.2.0
 
           1. Extract the whole ZIP.
-          2. Open BPSRStreamKit.exe.
-          3. Click Start Discord (recommended) or choose Twitch/TikTok.
+          2. Open BPSRStreamKit.exe and approve the Administrator prompt.
+          3. Pick Discord, Twitch, or TikTok.
+          4. Pick BPSR or another detected game.
+          5. Press the large Start button.
 
-          The first launch downloads the pinned portable OBS/FloodTuber builds.
-          No normal OBS installation is required.
+          BPSR uses the full DPS/HUD layout. Other games use the clean Game + Frame + Avatar layout.
+          The first launch downloads the pinned portable OBS/FloodTuber builds. No normal OBS installation is required.
           "@ | Set-Content publish/START_HERE.txt -Encoding UTF8
 
       - name: Package ZIP
@@ -79,26 +81,26 @@ jobs:
       - name: Verify packaged ZIP
         shell: pwsh
         run: |
-          $checkDir = Join-Path $env:RUNNER_TEMP 'bpsr-package-check'
+          $checkDir = Join-Path $env:RUNNER_TEMP 'streamkit-package-check'
           if (Test-Path $checkDir) { Remove-Item $checkDir -Recurse -Force }
           Expand-Archive BPSR-Portable-Stream-Kit-win-x64.zip -DestinationPath $checkDir -Force
 
           $required = @(
             'Assets/Frames/01_Minimal_Thin_1080p.png',
+            'Assets/Frames/05_TikTok_Minimal_1080x1920.png',
             'Assets/Screens/Starting_1080p.png',
             'Assets/Screens/BRB_1080p.png',
             'Assets/MyAvatar/idle.png',
             'Assets/MyAvatar/talk_a.png',
             'Assets/MyAvatar/talk_b.png',
             'templates/basic/scenes/BPSR_Horizontal.json',
+            'templates/basic/scenes/BPSR_TikTok_Vertical.json',
             'BPSRStreamKit.exe'
           )
 
           foreach ($relative in $required) {
             $file = Join-Path $checkDir $relative
-            if (-not (Test-Path $file)) {
-              throw "Packaged ZIP verification failed. Missing: $relative"
-            }
+            if (-not (Test-Path $file)) { throw "Packaged ZIP verification failed. Missing: $relative" }
           }
 
       - name: Upload build artifact
@@ -120,4 +122,23 @@ jobs:
           } else {
             $version = $refName
           }
-          gh release create "$version" BPSR-Portable-Stream-Kit-win-x64.zip --target "${{ github.sha }}" --generate-notes --title "BPSR Portable Stream Kit $version"
+
+          if (gh release view "$version" 2>$null) {
+            gh release upload "$version" BPSR-Portable-Stream-Kit-win-x64.zip --clobber
+          } else {
+            gh release create "$version" BPSR-Portable-Stream-Kit-win-x64.zip --target "${{ github.sha }}" --generate-notes --title "StreamKit $version"
+          }
+
+          New-Item -ItemType Directory -Force -Path release-status | Out-Null
+          @"
+          release=$version
+          status=published
+          commit=${{ github.sha }}
+          artifact=BPSR-Portable-Stream-Kit-win-x64.zip
+          "@ | Set-Content "release-status/$version.txt" -Encoding UTF8
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release-status
+          git commit -m "Record $version release [skip ci]"
+          git push origin HEAD:"${{ github.ref_name }}"
