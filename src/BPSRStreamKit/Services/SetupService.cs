@@ -1,3 +1,4 @@
+using System.IO;
 using System.IO.Compression;
 using System.Management;
 using System.Net.Http;
@@ -70,7 +71,7 @@ public sealed class SetupService
         if (Directory.Exists(AppPaths.ObsDirectory))
         {
             try { Directory.Delete(AppPaths.ObsDirectory, true); }
-            catch { /* A partial folder may contain locked files; extraction below will report a useful error. */ }
+            catch { }
         }
 
         Directory.CreateDirectory(AppPaths.ObsDirectory);
@@ -128,8 +129,6 @@ public sealed class SetupService
             var destination = Path.Combine(configRoot, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
 
-            // Protect the user's working layout/profile. Repair fills missing files; it does not reset custom positions,
-            // linked accounts, stream keys, or other user settings.
             if (File.Exists(destination))
                 continue;
 
@@ -167,7 +166,6 @@ public sealed class SetupService
         }
         catch
         {
-            // Fall back to x264 if Windows GPU enumeration is unavailable.
         }
 
         return "x264";
