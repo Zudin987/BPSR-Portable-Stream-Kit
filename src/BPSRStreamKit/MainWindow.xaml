@@ -138,7 +138,7 @@
     <Grid Grid.Row="8" Margin="2,14,2,0">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <TextBlock x:Name="FooterStatus" Text="No installer · no display capture" FontSize="11" Foreground="#6F7582"/>
-      <TextBlock Grid.Column="1" Text="v0.3.0" FontSize="11" Foreground="#6F7582"/>
+      <TextBlock Grid.Column="1" Text="v0.3.1" FontSize="11" Foreground="#6F7582"/>
     </Grid>
   </Grid>
 </Window>
