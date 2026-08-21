@@ -1,0 +1,39 @@
+name: Apply v2.0.2 avatar layout fixes
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'hotfix/v2.0.2' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/v2.0.2
+          fetch-depth: 0
+
+      - name: Apply source fixes
+        run: python3 scripts/apply_avatar_layout_v202.py
+
+      - name: Remove temporary script and trigger markers
+        run: |
+          rm -f scripts/apply_avatar_layout_v202.py
+          rm -f .trigger-avatar-layout-v202 .trigger-avatar-layout-v202-2
+
+      - name: Commit patched source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/BPSRStreamKit/MainWindow.xaml \
+                  src/BPSRStreamKit/Services/SetupService.cs \
+                  src/BPSRStreamKit/Services/ObsAutomationService.cs \
+                  scripts/apply_avatar_layout_v202.py \
+                  .trigger-avatar-layout-v202 \
+                  .trigger-avatar-layout-v202-2
+          git commit -m "fix: auto-fit vtuber and add it to live scenes"
+          git push origin HEAD:hotfix/v2.0.2
