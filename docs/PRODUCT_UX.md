@@ -2,34 +2,55 @@
 
 ## Product promise
 
-**Open the launcher, click one button, stream the exact BPSR layout without exposing the rest of the desktop.**
+**Pick a game, pick a destination, and get a clean private stream layout without manually building OBS scenes.**
 
-The launcher is intentionally not an OBS replacement. It hides OBS setup work until the user actually needs advanced controls.
+StreamKit is a game-streaming launcher, not a replacement for OBS. It hides setup complexity until the user intentionally opens advanced controls.
 
 ## Main screen hierarchy
 
-1. **System readiness** — three plain-language checks: OBS, BPSR, Resonance Logs.
-2. **Primary action** — `Start Discord` is visually dominant because it is the most common path.
-3. **Secondary platforms** — Twitch and TikTok remain one click away without competing with the main action.
-4. **Expectation setting** — short notes explain what happens after clicking without requiring a manual.
-5. **Advanced tools** — Open OBS and Repair Setup are hidden under Settings.
+1. **Destination** — Discord, Twitch, or TikTok.
+2. **Theme** — choose the visual profile.
+3. **Game** — select the running game to capture.
+4. **Readiness** — plain-language checks for the selected game, portable OBS, avatar layer, and private audio/capture setup.
+5. **Primary action** — open the prepared stream layout for the selected platform.
+6. **Advanced tools** — Open OBS, Open folder, Repair, and game rescan remain secondary.
 
-## Why this layout
+## Core behavior
 
-- Users should never have to understand `portable_mode.txt`, scene collections, profiles, window classes, encoder IDs, or plugin directories.
-- A missing optional app should not look like a fatal error. Resonance Logs is shown as optional when BPSR itself is ready.
-- First-run setup reuses the same primary button rather than introducing a separate installer wizard.
-- Repair is non-destructive: existing scene positions, profile changes, Twitch/TikTok account data, and stream keys are preserved.
+- The default path must work for games generally, not depend on one specific title.
+- A game-specific integration may add optional sources or layout enhancements, but the base clean-game workflow remains the product core.
+- Users should not need to understand scene collections, window classes, encoder IDs, portable mode, or plugin directories.
+- First-run setup reuses the same primary action instead of introducing a separate installer wizard.
+- Repair should preserve user account data and local customizations whenever possible.
 - Account credentials are never bundled in source control or release assets.
+
+## Platform guidance
+
+### Discord
+
+StreamKit prepares and opens the clean OBS source. Discord still performs the actual screen-share action. The UI should explicitly tell the user to share the OBS Projector/preview window in Discord after pressing **Open Discord Stream**.
+
+### Twitch / TikTok
+
+StreamKit opens the prepared OBS layout. The user connects the platform account/stream method locally and starts the broadcast from OBS.
 
 ## Visual direction
 
-The UI uses a dark neutral surface with restrained pink-to-violet accents inspired by the included avatar/frame art. Decorative styling is intentionally limited to the launcher identity and primary CTA so it stays readable and does not look like a game-cheat utility or a complex broadcasting dashboard.
+The launcher uses a dark neutral surface with restrained accents. Each stream profile can be more expressive:
+
+- **Profile A — Sakura Catgirl:** thin pink/violet frame, edge-hugging margins, tiny petal/sparkle accents.
+- **Profile B — Chibi Doctor:** thin cyan/white frame, edge-hugging margins, tiny medical cross/ECG/tech accents.
+
+Starting Soon and BRB screens should stay visually themed but extremely simple: one large phrase only (`STARTING SOON` or `BE RIGHT BACK`). No subtitles, profile labels, game names, or explanatory copy.
 
 ## Default streaming behavior
 
-- Discord/Twitch: 1920×1080, 60 FPS, Simple output mode.
-- TikTok: 1080×1920, 30 FPS, Simple output mode.
-- Hardware encoder is selected automatically when NVIDIA/AMD/Intel is detected; x264 is the fallback.
+- Discord/Twitch: 1920×1080, 60 FPS.
+- TikTok: 1080×1920 vertical layout.
+- Hardware encoder is selected automatically when available; x264 is the fallback.
 - Capture is application/window based. No default full-display capture.
-- BPSR audio is captured with the game source; global desktop audio is not part of the default scene.
+- Default audio focuses on the selected game + microphone rather than global desktop audio.
+
+## Compatibility note
+
+Some internal filenames and namespaces still contain historical `BPSR` naming for compatibility with existing templates and upgrades. User-facing product copy should remain game-generic.

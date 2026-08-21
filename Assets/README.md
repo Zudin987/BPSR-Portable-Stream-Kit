@@ -1,8 +1,8 @@
 # Stream visual assets
 
-The Windows release is designed to include the tested visual pack from the original portable setup.
+StreamKit ships two complete visual profiles for generic game streaming. The release build regenerates the active frame and intermission art so horizontal and vertical layouts stay consistent.
 
-Expected files:
+Expected Profile A files:
 
 ```text
 Assets/
@@ -22,4 +22,14 @@ Assets/
    └─ BRB_TikTok_1080x1920.png
 ```
 
-These are binary image assets and are intentionally separate from account credentials. Never add OBS `service.json`, Twitch/TikTok stream keys, cookies, or login tokens to this folder or repository.
+Profile B lives under `Assets/Themes/Profile_B_Doctor/` with its own Avatar, Frames and Screens folders.
+
+Design rules for v0.3.4:
+
+- Profile A frames sit very close to the canvas edge and use tiny sakura/petal/sparkle accents.
+- Profile B frames sit very close to the canvas edge and use tiny medical cross/ECG accents.
+- Starting Soon screens display only `STARTING SOON` as text.
+- BRB screens display only `BE RIGHT BACK` as text.
+- No game title is baked into either profile's intermission art.
+
+These are visual assets only. Never add OBS `service.json`, Twitch/TikTok stream keys, cookies, login tokens, or local account data to this folder or repository.

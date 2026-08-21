@@ -24,8 +24,8 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _statusTimer;
     private readonly IReadOnlyList<ThemeChoice> _themes = new[]
     {
-        new ThemeChoice(StreamTheme.ProfileA, "Profile A", "Sakura Catgirl · pink frame"),
-        new ThemeChoice(StreamTheme.ProfileB, "Profile B", "Chibi Doctor · medical frame")
+        new ThemeChoice(StreamTheme.ProfileA, "Profile A", "Sakura Catgirl · decorated pink frame"),
+        new ThemeChoice(StreamTheme.ProfileB, "Profile B", "Chibi Doctor · decorated medical frame")
     };
 
     private StreamTarget _selectedTarget = StreamTarget.Discord;
@@ -110,22 +110,22 @@ public partial class MainWindow : Window
         var gameName = game?.DisplayName ?? "Selected game";
 
         SetStatus(GameStatusDot, GameStatusText, state.GameRunning,
-            $"{gameName} detected", $"Waiting for {gameName}");
+            $"{gameName} detected", game is null ? "Choose or open a game" : $"Waiting for {gameName}");
         SetStatus(ObsStatusDot, ObsStatusText, state.ObsReady,
-            "Portable engine ready", "Stream engine needs setup");
+            "Portable OBS ready", "Portable OBS needs setup");
         SetStatus(AvatarStatusDot, AvatarStatusText, state.AvatarReady,
             $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} avatar ready", "Avatar layer needs setup");
         SetStatus(AudioStatusDot, AudioStatusText, state.AudioIsolationReady,
-            "Game + Mic isolated", "Audio sandbox needs setup");
+            "Game + Mic isolated", "Private audio setup needed");
 
         if (!state.ObsReady || !state.AvatarReady)
         {
             HeroEyebrow.Text = "SETUP REQUIRED";
             HeroEyebrow.Foreground = (Brush)FindResource("WarnBrush");
             HeroTitle.Text = "One click from ready";
-            HeroSubtitle.Text = "StreamKit will prepare its portable stream engine, selected avatar theme and private capture layout automatically.";
+            HeroSubtitle.Text = "StreamKit will prepare its portable OBS engine, selected visual profile and private game-capture layout automatically.";
             MainActionButton.Content = "Set up & " + GetActionLabel();
-            FooterStatus.Text = "First run setup stays inside this folder";
+            FooterStatus.Text = "First-run setup stays inside this folder";
             return;
         }
 
@@ -135,10 +135,10 @@ public partial class MainWindow : Window
         {
             HeroEyebrow.Text = "WAITING FOR GAME";
             HeroEyebrow.Foreground = (Brush)FindResource("WarnBrush");
-            HeroTitle.Text = "Open your game";
-            HeroSubtitle.Text = game?.IsBpsr == true
-                ? "The stream engine is ready. Open Blue Protocol: Star Resonance and StreamKit will hook it automatically."
-                : $"Open {gameName}, then press Scan games if its window changed.";
+            HeroTitle.Text = game is null ? "Open a game" : $"Open {gameName}";
+            HeroSubtitle.Text = game is null
+                ? "Open the game you want to stream, then press Scan games."
+                : $"The stream engine is ready. Open {gameName}, then press Scan games if its window changed.";
             FooterStatus.Text = $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · private capture ready · waiting for game";
             return;
         }
@@ -153,18 +153,8 @@ public partial class MainWindow : Window
             _ => "Ready to stream"
         };
 
-        if (game?.IsBpsr == true)
-        {
-            HeroSubtitle.Text = state.ResonanceLogsRunning
-                ? $"BPSR + Resonance Logs detected. {SelectedThemeChoice?.DisplayName ?? "Profile A"} is ready with your full DPS/HUD layout."
-                : $"BPSR is detected. {SelectedThemeChoice?.DisplayName ?? "Profile A"} is ready; DPS and Dungeon HUD will appear when Resonance Logs is open.";
-        }
-        else
-        {
-            HeroSubtitle.Text = $"{gameName} will use the clean {SelectedThemeChoice?.DisplayName ?? "Profile A"} layout: game + frame + avatar. BPSR-only DPS/HUD sources stay hidden.";
-        }
-
-        FooterStatus.Text = $"Ready · {SelectedThemeChoice?.DisplayName ?? "Profile A"} · no desktop capture · no Discord echo";
+        HeroSubtitle.Text = $"{gameName} will use the clean {SelectedThemeChoice?.DisplayName ?? "Profile A"} layout with game capture, frame and avatar.";
+        FooterStatus.Text = $"Ready · {SelectedThemeChoice?.DisplayName ?? "Profile A"} · private game capture";
     }
 
     private void SetStatus(Ellipse dot, TextBlock label, bool ready, string readyText, string missingText)
@@ -182,7 +172,7 @@ public partial class MainWindow : Window
         {
             SetBusy(true);
             await RefreshGameChoicesAsync(preserveSelection: true);
-            var game = SelectedGame ?? throw new InvalidOperationException("Choose a game first.");
+            var game = SelectedGame ?? throw new InvalidOperationException("Open a game, press Scan games, then choose it first.");
             var state = await _detection.DetectAsync(game);
 
             var showProgress = !state.ObsReady || !state.AvatarReady;
@@ -198,7 +188,7 @@ public partial class MainWindow : Window
             SetupProgressPanel.Visibility = Visibility.Collapsed;
 
             state = await _detection.DetectAsync(game);
-            if (!state.GameRunning && !game.IsBpsr)
+            if (!state.GameRunning)
                 throw new InvalidOperationException($"{game.DisplayName} is not running. Open the game, then click Scan games.");
 
             _catalog.Save(game);
@@ -207,9 +197,9 @@ public partial class MainWindow : Window
 
             FooterStatus.Text = _selectedTarget switch
             {
-                StreamTarget.Discord => $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · OBS ready · share the OBS Projector window in Discord",
-                StreamTarget.Twitch => $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · Twitch layout opened · use OBS Start Streaming when your account is connected",
-                StreamTarget.TikTok => $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · TikTok vertical layout opened · use your local TikTok stream method in OBS",
+                StreamTarget.Discord => $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · OBS ready · now share the OBS Projector window in Discord",
+                StreamTarget.Twitch => $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · Twitch layout opened · connect your account if needed, then use OBS Start Streaming",
+                StreamTarget.TikTok => $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · TikTok vertical layout opened · use your available TikTok stream method in OBS",
                 _ => "OBS opened"
             };
         }
@@ -238,10 +228,10 @@ public partial class MainWindow : Window
         var profile = SelectedThemeChoice?.DisplayName ?? "Profile A";
         ActionHint.Text = _selectedTarget switch
         {
-            StreamTarget.Discord => $"Game + Mic only · {profile} · share OBS Projector in Discord",
-            StreamTarget.Twitch => $"1080p60 · Game + Mic only · {profile}",
-            StreamTarget.TikTok => $"Vertical layout · Game + Mic only · {profile}",
-            _ => $"Game + Mic only · {profile}"
+            StreamTarget.Discord => $"{profile} · then share the OBS Projector in Discord",
+            StreamTarget.Twitch => $"{profile} · connect Twitch in OBS if needed, then Start Streaming",
+            StreamTarget.TikTok => $"{profile} · vertical layout · start using your TikTok stream method in OBS",
+            _ => $"Private game capture · {profile}"
         };
     }
 
@@ -253,24 +243,22 @@ public partial class MainWindow : Window
 
     private string GetActionLabel() => _selectedTarget switch
     {
-        StreamTarget.Discord => "Start Discord Stream",
-        StreamTarget.Twitch => "Go Live on Twitch",
-        StreamTarget.TikTok => "Start TikTok Live",
+        StreamTarget.Discord => "Open Discord Stream",
+        StreamTarget.Twitch => "Open Twitch Stream",
+        StreamTarget.TikTok => "Open TikTok Stream",
         _ => "Open Stream"
     };
 
     private void UpdateGameCard()
     {
         var game = SelectedGame;
-        GameLayoutText.Text = game?.LayoutLabel ?? "Choose a game";
-        PrivacyText.Text = game?.IsBpsr == true
-            ? "Only BPSR + your mic are captured. Desktop, browsers, Discord voices and notifications stay out."
-            : "Only the selected game + your mic are captured. BPSR DPS/HUD, desktop, browsers and Discord voices stay out.";
+        GameLayoutText.Text = game?.LayoutLabel ?? "Open a game, then Scan games";
+        PrivacyText.Text = "Only the selected game + your mic are captured by default. Desktop, browsers, chat voices and notifications stay out.";
     }
 
     private void UpdateThemeCard()
     {
-        ThemeDetailText.Text = SelectedThemeChoice?.Detail ?? "Sakura Catgirl · pink frame";
+        ThemeDetailText.Text = SelectedThemeChoice?.Detail ?? "Sakura Catgirl · decorated pink frame";
     }
 
     private StreamTheme LoadSavedTheme()
@@ -352,7 +340,7 @@ public partial class MainWindow : Window
         if (SelectedGame is { } game)
         {
             _catalog.SaveLastSelectedProcess(game.ProcessName);
-            if (!game.IsBpsr) _catalog.Save(game);
+            _catalog.Save(game);
         }
         await RefreshStatusAsync();
     }
@@ -389,7 +377,7 @@ public partial class MainWindow : Window
                 SetupStatusText.Text = value.Message;
             });
             await _setup.EnsureReadyAsync(progress, repair: true);
-            FooterStatus.Text = "Repair complete · scene positions and account settings preserved";
+            FooterStatus.Text = "Repair complete · local scene and account settings preserved";
         }
         catch (Exception ex)
         {

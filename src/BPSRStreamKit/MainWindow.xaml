@@ -28,7 +28,7 @@
         </Border>
         <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
           <TextBlock Text="StreamKit" FontSize="20" FontWeight="SemiBold"/>
-          <TextBlock Text="BPSR &amp; game streaming made simple" FontSize="12" Foreground="{StaticResource MutedBrush}"/>
+          <TextBlock Text="Game streaming made simple" FontSize="12" Foreground="{StaticResource MutedBrush}"/>
         </StackPanel>
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -50,9 +50,9 @@
         <TextBlock Text="STREAM TO" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Margin="4,0,0,8"/>
         <Border Background="#10131A" BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1" CornerRadius="14" Padding="5">
           <UniformGrid Columns="3">
-            <Button x:Name="DiscordSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Padding="8,0" Content="Discord" Click="DiscordSegment_Click" Margin="2"/>
-            <Button x:Name="TwitchSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Padding="8,0" Content="Twitch" Click="TwitchSegment_Click" Margin="2"/>
-            <Button x:Name="TikTokSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Padding="8,0" Content="TikTok" Click="TikTokSegment_Click" Margin="2"/>
+            <Button x:Name="DiscordSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Padding="6,0" Content="Discord" Click="DiscordSegment_Click" Margin="2"/>
+            <Button x:Name="TwitchSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Padding="6,0" Content="Twitch" Click="TwitchSegment_Click" Margin="2"/>
+            <Button x:Name="TikTokSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Padding="6,0" Content="TikTok" Click="TikTokSegment_Click" Margin="2"/>
           </UniformGrid>
         </Border>
       </StackPanel>
@@ -62,7 +62,7 @@
         <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
           <StackPanel>
             <ComboBox x:Name="ThemeCombo" DisplayMemberPath="DisplayName" MinHeight="44" SelectionChanged="ThemeCombo_SelectionChanged"/>
-            <TextBlock x:Name="ThemeDetailText" Text="Sakura Catgirl · pink frame" Margin="2,7,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}"/>
+            <TextBlock x:Name="ThemeDetailText" Text="Sakura Catgirl · decorated pink frame" Margin="2,7,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}"/>
           </StackPanel>
         </Border>
       </StackPanel>
@@ -74,7 +74,7 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel>
               <ComboBox x:Name="GameCombo" DisplayMemberPath="DisplayName" MinHeight="44" SelectionChanged="GameCombo_SelectionChanged"/>
-              <TextBlock x:Name="GameLayoutText" Text="Full layout · DPS + Dungeon HUD" Margin="2,7,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}"/>
+              <TextBlock x:Name="GameLayoutText" Text="Clean game layout" Margin="2,7,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}"/>
             </StackPanel>
             <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="Scan games" Click="ScanGames_Click" Margin="12,0,0,0" MinWidth="112"/>
           </Grid>
@@ -88,13 +88,13 @@
         <StackPanel Grid.Column="0" VerticalAlignment="Center">
           <TextBlock x:Name="HeroEyebrow" Text="READY" FontSize="11" FontWeight="Bold" Foreground="{StaticResource GoodBrush}"/>
           <TextBlock x:Name="HeroTitle" Text="Ready to stream" Margin="0,5,0,0" FontSize="28" FontWeight="SemiBold"/>
-          <TextBlock x:Name="HeroSubtitle" Text="Choose a game, destination and theme. StreamKit handles the private OBS scene for you." Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" LineHeight="19"/>
+          <TextBlock x:Name="HeroSubtitle" Text="Choose a game, destination and theme. StreamKit prepares a private OBS layout for you." Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" LineHeight="19"/>
           <Grid Margin="0,20,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="138"/></Grid.ColumnDefinitions>
-            <Button x:Name="MainActionButton" Grid.Column="0" Style="{StaticResource PrimaryButton}" Content="Start Discord Stream" Margin="0" Click="MainAction_Click"/>
+            <Button x:Name="MainActionButton" Grid.Column="0" Style="{StaticResource PrimaryButton}" Content="Open Discord Stream" Margin="0" Click="MainAction_Click"/>
             <Button x:Name="StopStreamButton" Grid.Column="2" Style="{StaticResource SecondaryButton}" Height="60" MinWidth="0" Padding="12,0" Content="Stop Stream" Click="StopStream_Click" Foreground="{StaticResource BadBrush}" ToolTip="Close the portable OBS instance"/>
           </Grid>
-          <TextBlock x:Name="ActionHint" Text="Game + Mic only · no desktop capture" Margin="2,9,0,0" FontSize="11" Foreground="#BDC3D0"/>
+          <TextBlock x:Name="ActionHint" Text="Then share the OBS Projector in Discord" Margin="2,9,0,0" FontSize="11" Foreground="#BDC3D0"/>
           <StackPanel x:Name="SetupProgressPanel" Visibility="Collapsed" Margin="0,14,0,0">
             <ProgressBar x:Name="SetupProgress" Height="5" Minimum="0" Maximum="100" Background="#252A36" Foreground="{StaticResource AccentBrush}"/>
             <TextBlock x:Name="SetupStatusText" Margin="0,8,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}"/>
@@ -117,8 +117,8 @@
         <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="13"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Width="34" Height="34" CornerRadius="10" Background="#163024"><TextBlock Text="✓" Foreground="{StaticResource GoodBrush}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
         <StackPanel Grid.Column="2">
-          <TextBlock Text="Private capture is on" FontSize="13" FontWeight="SemiBold"/>
-          <TextBlock x:Name="PrivacyText" Text="Only the selected game + your mic are included. Desktop, browser, Discord voices and notifications stay out." Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+          <TextBlock Text="Private game capture" FontSize="13" FontWeight="SemiBold"/>
+          <TextBlock x:Name="PrivacyText" Text="Only the selected game + your mic are included by default. Desktop, browsers, chat voices and notifications stay out." Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
         </StackPanel>
       </Grid>
     </Border>
@@ -129,7 +129,7 @@
         <StackPanel VerticalAlignment="Center">
           <TextBlock Text="Advanced settings" FontSize="14" FontWeight="SemiBold"/>
           <TextBlock Text="1080p · 60 FPS · hardware encoder when available" Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}"/>
-          <TextBlock Text="Repair preserves your BPSR scene positions and local streaming account settings." FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+          <TextBlock Text="Repair preserves local scene adjustments and streaming-account settings." FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
         </StackPanel>
         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
           <Button Style="{StaticResource SecondaryButton}" Content="Open OBS" Click="OpenObs_Click" MinWidth="124"/>
@@ -141,8 +141,8 @@
 
     <Grid Grid.Row="8" Margin="2,14,2,0">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-      <TextBlock x:Name="FooterStatus" Text="No installer · no display capture" FontSize="11" Foreground="#6F7582"/>
-      <TextBlock Grid.Column="1" Text="v0.3.3" FontSize="11" Foreground="#6F7582"/>
+      <TextBlock x:Name="FooterStatus" Text="Portable · private game capture · no display capture" FontSize="11" Foreground="#6F7582"/>
+      <TextBlock Grid.Column="1" Text="v0.3.4" FontSize="11" Foreground="#6F7582"/>
     </Grid>
   </Grid>
 </Window>
