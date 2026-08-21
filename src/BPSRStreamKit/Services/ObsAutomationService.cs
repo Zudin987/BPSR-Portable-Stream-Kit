@@ -11,7 +11,7 @@ namespace BPSRStreamKit.Services;
 
 public sealed class ObsAutomationService
 {
-    public const int Port = 4455;
+    public const int Port = 44561;
     private const string MicInputName = "Mic/Aux";
     private const string GameInputName = "Selected Game + Audio";
     private const string VTubeInputName = "VTube Studio Avatar";
@@ -219,9 +219,6 @@ public sealed class ObsAutomationService
         var total = timeout ?? TimeSpan.FromSeconds(25);
         var until = DateTime.UtcNow + total;
 
-        // Prefer VTube Studio's normal sender. If its sender name is different/numbered,
-        // automatically fall back to the first available Spout sender instead of making
-        // a beginner edit OBS manually.
         foreach (var sender in new[] { VTubeSenderName, SpoutFirstAvailable })
         {
             foreach (var scene in VTubeHorizontalScenes)
@@ -360,19 +357,27 @@ public sealed class ObsAutomationService
 
         await WithSessionAsync(async session =>
         {
-            foreach (var sceneName in VTubeHorizontalScenes)
+            var targets = new (string Scene, string Source, double X, double Y, double Width, double Height)[]
+            {
+                ("Game Clean", VTubeInputName, 20, 490, 520, 570),
+                ("Discord Share", VTubeInputName, 20, 490, 520, 570),
+                ("Twitch Live", VTubeInputName, 20, 490, 520, 570),
+                ("Vertical Live", "Vertical - VTube Studio Avatar", 20, 1270, 560, 650)
+            };
+
+            foreach (var target in targets)
             {
                 try
                 {
-                    var itemsResponse = await session.RequestAsync("GetSceneItemList", new JsonObject { ["sceneName"] = sceneName });
+                    var itemsResponse = await session.RequestAsync("GetSceneItemList", new JsonObject { ["sceneName"] = target.Scene });
                     var item = itemsResponse?["sceneItems"]?.AsArray()?.OfType<JsonObject>()
-                        .FirstOrDefault(x => string.Equals(x["sourceName"]?.GetValue<string>(), VTubeInputName, StringComparison.Ordinal));
+                        .FirstOrDefault(x => string.Equals(x["sourceName"]?.GetValue<string>(), target.Source, StringComparison.Ordinal));
                     var sceneItemId = item?["sceneItemId"]?.GetValue<int>() ?? 0;
                     if (sceneItemId <= 0) continue;
 
                     var transformResponse = await session.RequestAsync("GetSceneItemTransform", new JsonObject
                     {
-                        ["sceneName"] = sceneName, ["sceneItemId"] = sceneItemId
+                        ["sceneName"] = target.Scene, ["sceneItemId"] = sceneItemId
                     });
                     var transform = transformResponse?["sceneItemTransform"]?.AsObject();
                     var sourceWidth = transform?["sourceWidth"]?.GetValue<double>() ?? 1920.0;
@@ -387,19 +392,19 @@ public sealed class ObsAutomationService
 
                     await session.RequestAsync("SetSceneItemTransform", new JsonObject
                     {
-                        ["sceneName"] = sceneName,
+                        ["sceneName"] = target.Scene,
                         ["sceneItemId"] = sceneItemId,
                         ["sceneItemTransform"] = new JsonObject
                         {
-                            ["positionX"] = 20.0, ["positionY"] = 490.0, ["alignment"] = 5,
+                            ["positionX"] = target.X, ["positionY"] = target.Y, ["alignment"] = 5,
                             ["cropLeft"] = cropLeft, ["cropTop"] = cropTop, ["cropRight"] = cropRight, ["cropBottom"] = cropBottom,
                             ["boundsType"] = "OBS_BOUNDS_SCALE_INNER", ["boundsAlignment"] = 5,
-                            ["boundsWidth"] = 520.0, ["boundsHeight"] = 570.0
+                            ["boundsWidth"] = target.Width, ["boundsHeight"] = target.Height
                         }
                     });
                     await session.RequestAsync("SetSceneItemEnabled", new JsonObject
                     {
-                        ["sceneName"] = sceneName, ["sceneItemId"] = sceneItemId, ["sceneItemEnabled"] = true
+                        ["sceneName"] = target.Scene, ["sceneItemId"] = sceneItemId, ["sceneItemEnabled"] = true
                     });
                 }
                 catch { }
@@ -586,24 +591,32 @@ public sealed class ObsAutomationService
 
         public async Task<JsonObject?> RequestAsync(string requestType, JsonObject? requestData = null)
         {
-            var requestId = Guid.NewGuid().ToString("N");
-            var d = new JsonObject { ["requestType"] = requestType, ["requestId"] = requestId };
-            if (requestData is not null) d["requestData"] = requestData;
-            await SendObjectAsync(new JsonObject { ["op"] = 6, ["d"] = d }, CancellationToken.None);
-
-            while (true)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            try
             {
-                var message = await ReceiveObjectAsync(CancellationToken.None);
-                if (message?["op"]?.GetValue<int>() != 7) continue;
-                var body = message["d"]?.AsObject();
-                if (!string.Equals(body?["requestId"]?.GetValue<string>(), requestId, StringComparison.Ordinal)) continue;
-                var status = body?["requestStatus"]?.AsObject();
-                if (status?["result"]?.GetValue<bool>() != true)
+                var requestId = Guid.NewGuid().ToString("N");
+                var d = new JsonObject { ["requestType"] = requestType, ["requestId"] = requestId };
+                if (requestData is not null) d["requestData"] = requestData;
+                await SendObjectAsync(new JsonObject { ["op"] = 6, ["d"] = d }, cts.Token);
+
+                while (true)
                 {
-                    var comment = status?["comment"]?.GetValue<string>() ?? $"OBS request '{requestType}' failed.";
-                    throw new InvalidOperationException(comment);
+                    var message = await ReceiveObjectAsync(cts.Token);
+                    if (message?["op"]?.GetValue<int>() != 7) continue;
+                    var body = message["d"]?.AsObject();
+                    if (!string.Equals(body?["requestId"]?.GetValue<string>(), requestId, StringComparison.Ordinal)) continue;
+                    var status = body?["requestStatus"]?.AsObject();
+                    if (status?["result"]?.GetValue<bool>() != true)
+                    {
+                        var comment = status?["comment"]?.GetValue<string>() ?? $"OBS request '{requestType}' failed.";
+                        throw new InvalidOperationException(comment);
+                    }
+                    return body?["responseData"]?.AsObject();
                 }
-                return body?["responseData"]?.AsObject();
+            }
+            catch (OperationCanceledException ex)
+            {
+                throw new TimeoutException($"OBS request '{requestType}' timed out.", ex);
             }
         }
 

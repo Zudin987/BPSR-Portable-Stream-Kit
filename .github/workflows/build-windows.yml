@@ -3,7 +3,6 @@ name: Build Windows StreamKit
 on:
   push:
     branches: [main, 'release/v*']
-    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -285,19 +284,19 @@ jobs:
           )
           foreach($f in $required){if(-not(Test-Path $f)){throw "Missing release file: $f"}}
           @"
-          StreamKit v0.4.2
+          StreamKit v2.0.3
 
           1. Extract the whole ZIP and run BPSRStreamKit.exe.
-          2. Open the game you want to stream and press Scan games if needed.
-          3. Choose an Avatar, Frame Theme and Stream Mode.
+          2. Open the game you want to stream and press Find games if needed.
+          3. Choose an Avatar, Frame Style and Stream Mode.
 
           Full VTuber first use:
           - StreamKit installs Spout2 into its portable OBS automatically.
           - In VTube Studio choose your model/webcam, enable Spout2 output, use Color Picker Background, enable Transparent in capture, and leave the sender as VTubeStudioSpout.
-          - StreamKit now verifies the actual transparent Spout frame before continuing.
+          - StreamKit verifies the actual transparent avatar frame and auto-fits it for horizontal and TikTok vertical Live layouts.
 
           Discord Share:
-          - Click Open Discord Share. StreamKit opens Windowed Projector (Program) automatically.
+          - Click Start Discord Share. StreamKit opens Windowed Projector (Program) automatically.
           - In Discord -> Share Your Screen -> choose the OBS Windowed Projector with sound.
           - Keep your normal Discord microphone selected. StreamKit excludes the OBS mic from Discord share audio to avoid double voice.
 
@@ -305,6 +304,10 @@ jobs:
           - One-time: connect Twitch in portable OBS and configure a TikTok Vertical output in Aitum Stream Suite.
           - Twitch/TikTok receive selected-game audio + your RNNoise mic. Desktop/system audio is disabled so Discord friends are excluded.
           - StreamKit opens the Discord projector too; its audio path contains game audio, not the OBS mic.
+
+          Repair:
+          - Fix setup clean-reinstalls the selected runtime plugins and rebuilds StreamKit scenes while preserving account/output configuration.
+          - StreamKit verifies OBS and Spout with pinned SHA-256 values and FloodTuber/Aitum with official GitHub release-asset SHA-256 digests.
 
           While active use StreamKit's Starting Soon / Live / BRB / Mic controls instead of touching OBS.
           StreamKit intentionally disables update prompts in its portable OBS copy because OBS 32.2.1 and its plugins are pinned as a tested bundle.
@@ -316,6 +319,8 @@ jobs:
           Expand-Archive StreamKit-win-x64.zip $check -Force
           if(-not(Test-Path (Join-Path $check 'BPSRStreamKit.exe'))){throw 'Packaged ZIP is missing the launcher'}
           if(-not(Test-Path (Join-Path $check 'START_HERE.txt'))){throw 'Packaged ZIP is missing START_HERE'}
+          if(-not(Test-Path (Join-Path $check 'README.md'))){throw 'Packaged ZIP is missing README'}
+          if(-not(Test-Path (Join-Path $check 'THIRD_PARTY_NOTICES.md'))){throw 'Packaged ZIP is missing third-party notices'}
           if(-not(Test-Path (Join-Path $check 'Assets/Screens/BRB_1080p.png'))){throw 'Packaged ZIP is missing Profile A BRB'}
           if(-not(Test-Path (Join-Path $check 'Assets/Themes/Profile_B_Doctor/Screens/BRB_1080p.jpg'))){throw 'Packaged ZIP is missing Profile B BRB'}
 
@@ -328,7 +333,7 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v')
+    if: startsWith(github.ref, 'refs/heads/release/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -345,11 +350,7 @@ jobs:
         run: |
           set -euo pipefail
           zip='release-artifact/StreamKit-win-x64.zip'
-          if [[ "$GITHUB_REF" == refs/heads/release/v* ]]; then
-            version="${GITHUB_REF_NAME#release/}"
-            if gh release view "$version" >/dev/null 2>&1; then gh release delete "$version" --cleanup-tag --yes; fi
-            gh release create "$version" "$zip" --target "$GITHUB_SHA" --generate-notes --title "StreamKit $version"
-          else
-            version="$GITHUB_REF_NAME"
-            if gh release view "$version" >/dev/null 2>&1; then gh release upload "$version" "$zip" --clobber; else gh release create "$version" "$zip" --target "$GITHUB_SHA" --generate-notes --title "StreamKit $version"; fi
-          fi
+          version="${GITHUB_REF_NAME#release/}"
+          target="$(gh api "repos/$GH_REPO/commits/main" --jq .sha)"
+          if gh release view "$version" >/dev/null 2>&1; then gh release delete "$version" --cleanup-tag --yes; fi
+          gh release create "$version" "$zip" --target "$target" --generate-notes --title "StreamKit $version"

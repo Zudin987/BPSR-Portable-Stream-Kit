@@ -604,7 +604,7 @@ public partial class MainWindow : Window
         LiveButton.IsEnabled = !busy && _streamActive;
         BrbButton.IsEnabled = !busy && _streamActive;
         MicMuteButton.IsEnabled = !busy && _streamActive && _selectedMode == StreamMode.AllPlatforms;
-        CheckAvatarButton.IsEnabled = !busy;
+        CheckAvatarButton.IsEnabled = !busy && !_streamActive;
         Cursor = busy ? System.Windows.Input.Cursors.Wait : System.Windows.Input.Cursors.Arrow;
     }
 
@@ -767,6 +767,11 @@ public partial class MainWindow : Window
     private async void CheckAvatar_Click(object sender, RoutedEventArgs e)
     {
         if (_busy || _selectedAvatar != AvatarMode.VTubeStudio) return;
+        if (_streamActive)
+        {
+            ShowProblem("Avatar check is unavailable while live", "Stop the current share/stream before running the avatar test. Your live OBS session will not be restarted.");
+            return;
+        }
         try
         {
             HideProblem();

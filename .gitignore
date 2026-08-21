@@ -29,6 +29,10 @@ config-backup/
 *.p12
 *.pfx
 
+# StreamKit local preferences / generated secrets
+user-data/
+.streamkit-*
+
 # IDE / local user files
 *.user
 *.suo

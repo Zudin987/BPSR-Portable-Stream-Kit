@@ -53,6 +53,7 @@ public sealed class SetupService
         }
 
         var obsRoot = AppPaths.FindObsRoot() ?? throw new InvalidOperationException("OBS was downloaded but obs64.exe could not be found.");
+        if (repair) ResetRuntimeComponentsForRepair(obsRoot, needAitum, needSpout);
         File.WriteAllText(Path.Combine(obsRoot, "portable_mode.txt"), string.Empty);
         File.WriteAllText(Path.Combine(obsRoot, "disable_updater.txt"), string.Empty);
 
@@ -193,27 +194,45 @@ public sealed class SetupService
     private async Task EnsureFloodTuberAsync(string obsRoot, IProgress<(int Percent, string Message)>? progress)
     {
         var pluginDll = Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll");
-        if (File.Exists(pluginDll)) return;
+        if (IsUsablePluginFile(pluginDll)) return;
+        try { if (File.Exists(pluginDll)) File.Delete(pluginDll); } catch { }
 
         var zipPath = Path.Combine(AppPaths.CacheDirectory, $"FloodTuber-Portable-v{FloodTuberVersion}.zip");
-        if (!File.Exists(zipPath))
+        var expectedSha = await GetOfficialGitHubAssetSha256Async("justflood/flood-tuber", "v1.1.0", $"FloodTuber-Portable-v{FloodTuberVersion}.zip");
+        if (!File.Exists(zipPath) || !await VerifySha256Async(zipPath, expectedSha))
+        {
+            try { if (File.Exists(zipPath)) File.Delete(zipPath); } catch { }
             await DownloadFileAsync(FloodTuberUrl, zipPath, 53, 60, progress, "Downloading PNG avatar fallback");
+        }
+        if (!await VerifySha256Async(zipPath, expectedSha))
+            throw new InvalidDataException("FloodTuber download failed its official GitHub SHA-256 verification. Nothing was installed.");
 
         var tempDir = Path.Combine(AppPaths.CacheDirectory, "floodtuber-temp");
         if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
         Directory.CreateDirectory(tempDir);
-        ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
+        try
+        {
+            ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
+            var sourceDll = Directory.EnumerateFiles(tempDir, "flood-tuber.dll", SearchOption.AllDirectories).FirstOrDefault();
+            if (sourceDll is null || !IsUsablePluginFile(sourceDll))
+                throw new InvalidDataException("FloodTuber archive did not contain a usable flood-tuber.dll.");
+            Directory.CreateDirectory(Path.GetDirectoryName(pluginDll)!);
+            File.Copy(sourceDll, pluginDll, overwrite: true);
 
-        var sourceDll = Directory.EnumerateFiles(tempDir, "flood-tuber.dll", SearchOption.AllDirectories).FirstOrDefault();
-        if (sourceDll is null) throw new InvalidDataException("FloodTuber archive did not contain flood-tuber.dll.");
-        Directory.CreateDirectory(Path.GetDirectoryName(pluginDll)!);
-        File.Copy(sourceDll, pluginDll, overwrite: true);
-
-        var dataDirectory = Directory.EnumerateDirectories(tempDir, "flood-tuber", SearchOption.AllDirectories)
-            .FirstOrDefault(path => path.Replace('\\', '/').Contains("/data/obs-plugins/flood-tuber", StringComparison.OrdinalIgnoreCase));
-        if (dataDirectory is not null)
-            CopyDirectory(dataDirectory, Path.Combine(obsRoot, "data", "obs-plugins", "flood-tuber"), overwrite: true);
-        try { Directory.Delete(tempDir, true); } catch { }
+            var dataDirectory = Directory.EnumerateDirectories(tempDir, "flood-tuber", SearchOption.AllDirectories)
+                .FirstOrDefault(path => path.Replace('\\', '/').Contains("/data/obs-plugins/flood-tuber", StringComparison.OrdinalIgnoreCase));
+            if (dataDirectory is not null)
+                CopyDirectory(dataDirectory, Path.Combine(obsRoot, "data", "obs-plugins", "flood-tuber"), overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(zipPath); } catch { }
+            throw;
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
     }
 
     private async Task EnsureSpoutAsync(string obsRoot, IProgress<(int Percent, string Message)>? progress)
@@ -256,8 +275,14 @@ public sealed class SetupService
         if (FindAitumPlugin(obsRoot) is not null) return;
 
         var zipPath = Path.Combine(AppPaths.CacheDirectory, $"aitum-stream-suite-{AitumVersion}-windows.zip");
-        if (!File.Exists(zipPath))
+        var expectedSha = await GetOfficialGitHubAssetSha256Async("Aitum/obs-aitum-stream-suite", AitumVersion, "aitum-stream-suite-windows.zip");
+        if (!File.Exists(zipPath) || !await VerifySha256Async(zipPath, expectedSha))
+        {
+            try { if (File.Exists(zipPath)) File.Delete(zipPath); } catch { }
             await DownloadFileAsync(AitumUrl, zipPath, 70, 78, progress, "Downloading Aitum multistream support");
+        }
+        if (!await VerifySha256Async(zipPath, expectedSha))
+            throw new InvalidDataException("Aitum download failed its official GitHub SHA-256 verification. Nothing was installed.");
 
         var tempDir = Path.Combine(AppPaths.CacheDirectory, "aitum-temp");
         if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
@@ -265,18 +290,19 @@ public sealed class SetupService
         try
         {
             ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
+            var copied = CopyPortableObsPlugin(tempDir, obsRoot);
+            if (copied == 0 || FindAitumPlugin(obsRoot) is null)
+                throw new InvalidDataException("Aitum Stream Suite archive did not contain the expected portable OBS plugin files.");
         }
         catch
         {
             try { File.Delete(zipPath); } catch { }
-            throw new InvalidDataException("The Aitum download was not a valid ZIP. Run Repair to retry the official pinned download.");
+            throw;
         }
-
-        var copied = CopyPortableObsPlugin(tempDir, obsRoot);
-        try { Directory.Delete(tempDir, true); } catch { }
-
-        if (copied == 0 || FindAitumPlugin(obsRoot) is null)
-            throw new InvalidDataException("Aitum Stream Suite archive did not contain the expected portable OBS plugin files.");
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
     }
 
     private static int CopyPortableObsPlugin(string tempDir, string obsRoot)
@@ -341,6 +367,68 @@ public sealed class SetupService
             File.Copy(path, Path.Combine(AppPaths.BackupDirectory, $"{name}-{stamp}.json"), overwrite: true);
         }
         catch { }
+    }
+
+    private static bool IsUsablePluginFile(string path)
+    {
+        try { return File.Exists(path) && new FileInfo(path).Length > 1024; }
+        catch { return false; }
+    }
+
+    private static void ResetRuntimeComponentsForRepair(string obsRoot, bool needAitum, bool needSpout)
+    {
+        static void DeleteFile(string path) { try { if (File.Exists(path)) File.Delete(path); } catch { } }
+        static void DeleteDirectory(string path) { try { if (Directory.Exists(path)) Directory.Delete(path, true); } catch { } }
+
+        DeleteFile(Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll"));
+        DeleteDirectory(Path.Combine(obsRoot, "data", "obs-plugins", "flood-tuber"));
+        DeleteFile(Path.Combine(AppPaths.CacheDirectory, $"FloodTuber-Portable-v{FloodTuberVersion}.zip"));
+
+        if (needSpout)
+        {
+            DeleteFile(Path.Combine(obsRoot, "obs-plugins", "64bit", "win-spout.dll"));
+            DeleteDirectory(Path.Combine(obsRoot, "data", "obs-plugins", "win-spout"));
+            DeleteDirectory(Path.Combine(obsRoot, "data", "obs-plugins", "spout2"));
+            DeleteFile(Path.Combine(AppPaths.CacheDirectory, $"win-spout-{SpoutVersion}-windows-x64-portable.zip"));
+        }
+
+        if (needAitum)
+        {
+            try
+            {
+                var pluginRoot = Path.Combine(obsRoot, "obs-plugins");
+                if (Directory.Exists(pluginRoot))
+                    foreach (var file in Directory.EnumerateFiles(pluginRoot, "*aitum*.dll", SearchOption.AllDirectories).ToArray()) DeleteFile(file);
+                var dataRoot = Path.Combine(obsRoot, "data", "obs-plugins");
+                if (Directory.Exists(dataRoot))
+                    foreach (var dir in Directory.EnumerateDirectories(dataRoot).Where(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase)).ToArray()) DeleteDirectory(dir);
+            }
+            catch { }
+            DeleteFile(Path.Combine(AppPaths.CacheDirectory, $"aitum-stream-suite-{AitumVersion}-windows.zip"));
+        }
+    }
+
+    private async Task<string> GetOfficialGitHubAssetSha256Async(string repository, string tag, string assetName)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repository}/releases/tags/{tag}");
+        request.Headers.TryAddWithoutValidation("User-Agent", "StreamKit/2.0.3");
+        request.Headers.TryAddWithoutValidation("Accept", "application/vnd.github+json");
+        using var response = await _http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        if (!document.RootElement.TryGetProperty("assets", out var assets))
+            throw new InvalidDataException($"GitHub did not return release assets for {repository} {tag}.");
+
+        foreach (var asset in assets.EnumerateArray())
+        {
+            if (!asset.TryGetProperty("name", out var name) || !string.Equals(name.GetString(), assetName, StringComparison.Ordinal)) continue;
+            if (!asset.TryGetProperty("digest", out var digestNode)) break;
+            var digest = digestNode.GetString() ?? string.Empty;
+            if (digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) && digest.Length > 7)
+                return digest[7..];
+            break;
+        }
+        throw new InvalidDataException($"GitHub did not publish a SHA-256 digest for {assetName}. StreamKit will not install an unverified archive.");
     }
 
     private static void StopPortableObsForRepair()
@@ -593,8 +681,8 @@ public sealed class SetupService
     {
         if (AppPaths.FindObsExe() is null) throw new FileNotFoundException("Portable OBS is missing after setup.");
         var obsRoot = AppPaths.FindObsRoot()!;
-        if (!File.Exists(Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll")))
-            throw new FileNotFoundException("FloodTuber plugin is missing after setup.");
+        if (!IsUsablePluginFile(Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll")))
+            throw new FileNotFoundException("FloodTuber plugin is missing or damaged after setup.");
         if (needSpout && FindSpoutPlugin(obsRoot) is null)
             throw new FileNotFoundException("Spout2 plugin is missing after setup.");
         if (needAitum && FindAitumPlugin(obsRoot) is null)
@@ -616,10 +704,11 @@ public sealed class SetupService
     private static string? FindSpoutPlugin(string obsRoot)
     {
         var expected = Path.Combine(obsRoot, "obs-plugins", "64bit", "win-spout.dll");
-        if (File.Exists(expected)) return expected;
+        if (IsUsablePluginFile(expected)) return expected;
         try
         {
-            return Directory.EnumerateFiles(Path.Combine(obsRoot, "obs-plugins"), "win-spout.dll", SearchOption.AllDirectories).FirstOrDefault();
+            return Directory.EnumerateFiles(Path.Combine(obsRoot, "obs-plugins"), "win-spout.dll", SearchOption.AllDirectories)
+                .FirstOrDefault(IsUsablePluginFile);
         }
         catch { return null; }
     }
@@ -629,7 +718,7 @@ public sealed class SetupService
         try
         {
             return Directory.EnumerateFiles(Path.Combine(obsRoot, "obs-plugins"), "*.dll", SearchOption.AllDirectories)
-                .FirstOrDefault(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase) && IsUsablePluginFile(x));
         }
         catch { return null; }
     }
