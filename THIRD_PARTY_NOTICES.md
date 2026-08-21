@@ -31,9 +31,7 @@ Pinned portable archive SHA-256:
 - Purpose: optional lightweight PNG/avatar fallback inside OBS
 - Upstream licence: GNU General Public License v2
 
-StreamKit downloads the official portable ZIP from the FloodTuber GitHub Release and checks that the expected plugin files/layout are present before copying them into portable OBS.
-
-The current StreamKit source does not contain a hard-coded authoritative SHA-256 for the FloodTuber v1.1.0 ZIP. The URL is version-pinned, but checksum verification remains a supply-chain hardening opportunity.
+StreamKit downloads the official portable ZIP from the FloodTuber GitHub Release. Before installation, StreamKit reads the official GitHub Release asset metadata and verifies the archive against GitHub's published SHA-256 `digest`. **Fix setup** removes the cached archive/plugin and performs a clean verified reinstall instead of trusting an old DLL merely because it exists.
 
 ## Aitum Stream Suite
 
@@ -41,9 +39,7 @@ The current StreamKit source does not contain a hard-coded authoritative SHA-256
 - Version currently pinned by StreamKit: `1.2.1`
 - Purpose: optional multi-output support and a separate 1080×1920 vertical canvas for TikTok while Twitch/Discord use the horizontal canvas
 
-Aitum is downloaded only when the **Discord + Twitch + TikTok** mode needs it. StreamKit uses the official version-pinned Windows ZIP and validates that the expected OBS plugin files are present before treating setup as complete.
-
-The current StreamKit source does not yet contain a hard-coded authoritative SHA-256 for the Aitum 1.2.1 Windows ZIP. This is a known supply-chain hardening opportunity.
+Aitum is downloaded only when the **Discord + Twitch + TikTok** mode needs it. Before installation, StreamKit reads the official GitHub Release asset metadata and verifies the Windows ZIP against GitHub's published SHA-256 `digest`, then validates that the expected portable OBS plugin files are present. **Fix setup** removes the cached runtime plugin/archive and performs a clean verified reinstall while keeping the user's Aitum profile/output configuration.
 
 ## VTube Studio
 
