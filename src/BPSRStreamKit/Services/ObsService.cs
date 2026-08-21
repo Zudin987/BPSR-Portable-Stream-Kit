@@ -40,6 +40,7 @@ public sealed class ObsService
         };
         startInfo.ArgumentList.Add("--portable");
         startInfo.ArgumentList.Add("--disable-shutdown-check");
+        startInfo.ArgumentList.Add("--disable-updater");
         AddWebSocketArguments(startInfo);
 
         switch (mode)
@@ -71,6 +72,7 @@ public sealed class ObsService
         };
         info.ArgumentList.Add("--portable");
         info.ArgumentList.Add("--disable-shutdown-check");
+        info.ArgumentList.Add("--disable-updater");
         AddWebSocketArguments(info);
         AddSelection(info, "Twitch 1080p", "BPSR Horizontal", "Game Clean");
         Process.Start(info);
@@ -181,6 +183,7 @@ public sealed class ObsService
         string frameFile, string startingScreen, string brbScreen, bool showDpsPanel, bool vertical,
         AvatarMode avatarMode, VTubeCaptureTarget? vTubeTarget)
     {
+        _ = vTubeTarget;
         if (!File.Exists(file)) throw new FileNotFoundException("The OBS scene collection is missing. Use Advanced → Repair once.", file);
         var root = JsonNode.Parse(File.ReadAllText(file))?.AsObject() ?? throw new InvalidDataException("OBS scene collection could not be read.");
         var sources = root["sources"]?.AsArray() ?? throw new InvalidDataException("OBS scene collection has no sources array.");
@@ -198,14 +201,15 @@ public sealed class ObsService
         avatarSettings["custom_avatars_path"] = ObsPath(avatarDirectory);
 
         var vTube = FindSource(sources, "VTube Studio Avatar") ?? throw new InvalidOperationException("The VTube Studio source is missing. Use Advanced → Repair once.");
-        var vTubeSettings = vTube["settings"]?.AsObject() ?? new JsonObject();
-        vTube["settings"] = vTubeSettings;
-        vTubeSettings["capture_mode"] = "window";
-        vTubeSettings["capture_audio"] = false;
-        vTubeSettings["capture_cursor"] = false;
-        vTubeSettings["allow_transparency"] = true;
-        vTubeSettings["anti_cheat_hook"] = false;
-        vTubeSettings["window"] = vTubeTarget?.ObsWindowString ?? "VTube Studio:UnityWndClass:VTube Studio.exe";
+        vTube["id"] = "spout_capture";
+        vTube["versioned_id"] = "spout_capture";
+        vTube["mixers"] = 0;
+        vTube["settings"] = new JsonObject
+        {
+            ["spoutsenders"] = "VTubeStudioSpout",
+            ["tickspeedlimit"] = 100,
+            ["compositemode"] = 4
+        };
 
         var frame = FindSource(sources, frameSourceName) ?? throw new InvalidOperationException($"The stream frame source '{frameSourceName}' is missing.");
         var frameSettings = frame["settings"]?.AsObject() ?? new JsonObject();
