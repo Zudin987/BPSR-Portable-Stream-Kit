@@ -46,14 +46,19 @@ TikTok requires LIVE/stream-key access on the TikTok account. StreamKit cannot g
 
 ### Full VTuber — recommended
 
-Uses **VTube Studio** as the main avatar and hides the old PNG/FloodTuber source.
+Uses **VTube Studio + Spout2** as the main avatar and hides the old PNG/FloodTuber source.
 
-- VTube Studio opens through Steam automatically.
-- Webcam face tracking, head motion, blinking, mouth movement, expressions and Live2D physics are handled by VTube Studio.
-- The webcam itself is not added to the stream scene.
-- Use a bundled/sample VTube Studio model or any compatible Live2D model you have permission to use.
+StreamKit automatically installs the pinned portable Spout2 OBS plugin and creates the `VTube Studio Avatar` source with sender `VTubeStudioSpout` and **Premultiplied Alpha**. This avoids capturing the VTube Studio window/background/UI.
 
-For a clean transparent OBS capture, enable VTube Studio's transparent/game-capture background option for the model output.
+VTube Studio only needs a small one-time setup:
+
+1. Choose your Live2D model and webcam/tracker in VTube Studio.
+2. Turn on **Spout2 output** in VTube Studio.
+3. Select **Color Picker Background**.
+4. Use transparent black and enable **Transparent in capture**.
+5. Leave the Spout sender name as `VTubeStudioSpout` for the normal single-instance setup.
+
+After that, StreamKit handles the OBS side automatically. Webcam face tracking, head motion, blinking, mouth movement, expressions and Live2D physics remain handled by VTube Studio. The webcam image itself is not added to the stream scene.
 
 ### PNG Avatar
 
@@ -76,11 +81,11 @@ The frame theme is independent from the avatar mode. A full VTube Studio model c
 StreamKit handles the repetitive pieces for you:
 
 - portable OBS setup,
+- Spout2 transparent VTube Studio capture,
 - FloodTuber fallback setup,
 - Aitum Stream Suite setup for multistream mode,
 - local authenticated OBS WebSocket automation,
 - game-window capture,
-- VTube Studio capture source,
 - horizontal Twitch/Discord scene,
 - vertical TikTok scene,
 - OBS Virtual Camera,
@@ -88,6 +93,14 @@ StreamKit handles the repetitive pieces for you:
 - remembering your stream mode, avatar choice, frame theme and last game.
 
 VTube Studio, Twitch and TikTok still require their own legitimate account/model access. StreamKit does not bypass platform requirements.
+
+## OBS updates
+
+StreamKit treats portable OBS and its plugins as a **tested pinned bundle**. To avoid OBS updating itself independently and potentially breaking FloodTuber, Spout2 or Aitum compatibility, StreamKit disables OBS's built-in update checks for its portable OBS instance.
+
+This is intentional. Update the streaming engine by moving to a newer StreamKit release after its OBS/plugin combination has been tested, rather than accepting an OBS self-update prompt inside the portable copy.
+
+This setting affects only the OBS copy inside the StreamKit folder. A separate normally-installed OBS installation is not changed.
 
 ## Privacy and local credentials
 
@@ -109,6 +122,7 @@ Never commit or share:
 StreamKit currently pins:
 
 - **OBS Studio 32.2.1** — official OBS GitHub release, SHA-256 verified.
+- **Spout2 OBS plugin 1.12.0** — official Off-World-Live portable release, SHA-256 verified; installed when Full VTuber mode needs it.
 - **FloodTuber 1.1.0** — official FloodTuber release; used for PNG fallback mode.
 - **Aitum Stream Suite 1.2.1** — official Aitum GitHub release; installed only when All Platforms mode needs it.
 
@@ -146,4 +160,4 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party notices.
 
 ## Disclaimer
 
-This is an unofficial community streaming utility. OBS Studio, VTube Studio, Aitum Stream Suite, FloodTuber, Discord, Twitch, TikTok, Steam and game names belong to their respective owners. StreamKit is not endorsed by those services unless explicitly stated otherwise.
+This is an unofficial community streaming utility. OBS Studio, VTube Studio, Spout2, Aitum Stream Suite, FloodTuber, Discord, Twitch, TikTok, Steam and game names belong to their respective owners. StreamKit is not endorsed by those services unless explicitly stated otherwise.

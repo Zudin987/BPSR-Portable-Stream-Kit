@@ -14,11 +14,14 @@ public sealed class SetupService
     private const string ObsVersion = "32.2.1";
     private const string FloodTuberVersion = "1.1.0";
     public const string AitumVersion = "1.2.1";
+    public const string SpoutVersion = "1.12.0";
 
     private const string ObsUrl = "https://github.com/obsproject/obs-studio/releases/download/32.2.1/OBS-Studio-32.2.1-Windows-x64.zip";
     private const string FloodTuberUrl = "https://github.com/justflood/flood-tuber/releases/download/v1.1.0/FloodTuber-Portable-v1.1.0.zip";
     private const string AitumUrl = "https://github.com/Aitum/obs-aitum-stream-suite/releases/download/1.2.1/aitum-stream-suite-windows.zip";
+    private const string SpoutUrl = "https://github.com/Off-World-Live/obs-spout2-plugin/releases/download/1.12.0/win-spout-1.12.0-windows-x64-portable.zip";
     private const string ObsSha256 = "db64a2934f8261f85b1410b84be011207a0afda5400d008289f1f1e211bcc7de";
+    private const string SpoutSha256 = "6c5a31d6f30a44277b1955d4f85a1da1c0baa97a13075594d2bbca475104ee8a";
 
     private readonly HttpClient _http = new(new HttpClientHandler
     {
@@ -28,7 +31,8 @@ public sealed class SetupService
         Timeout = TimeSpan.FromMinutes(15)
     };
 
-    public async Task EnsureReadyAsync(IProgress<(int Percent, string Message)>? progress = null, bool repair = false, bool needAitum = false)
+    public async Task EnsureReadyAsync(IProgress<(int Percent, string Message)>? progress = null, bool repair = false,
+        bool needAitum = false, bool needSpout = false)
     {
         Directory.CreateDirectory(AppPaths.CacheDirectory);
 
@@ -42,25 +46,33 @@ public sealed class SetupService
 
         var obsRoot = AppPaths.FindObsRoot() ?? throw new InvalidOperationException("OBS was downloaded but obs64.exe could not be found.");
         File.WriteAllText(Path.Combine(obsRoot, "portable_mode.txt"), string.Empty);
+        File.WriteAllText(Path.Combine(obsRoot, "disable_updater.txt"), string.Empty);
 
         progress?.Report((52, "Syncing PNG avatar fallback…"));
         await EnsureFloodTuberAsync(obsRoot, progress);
 
+        if (needSpout)
+        {
+            progress?.Report((61, $"Checking Spout2 {SpoutVersion} for transparent VTuber capture…"));
+            await EnsureSpoutAsync(obsRoot, progress);
+        }
+
         if (needAitum)
         {
-            progress?.Report((64, $"Checking Aitum Stream Suite {AitumVersion}…"));
+            progress?.Report((70, $"Checking Aitum Stream Suite {AitumVersion}…"));
             await EnsureAitumAsync(obsRoot, progress);
         }
 
-        progress?.Report((78, "Preparing stream layouts…"));
-        InstallConfigTemplates(repair);
+        progress?.Report((82, "Preparing stream layouts…"));
+        InstallConfigTemplates(repair, needSpout);
+        EnsureObsUpdatePolicy();
 
         var password = ObsAutomationService.GetOrCreatePassword();
         ObsAutomationService.EnsureServerConfig(password);
         if (needAitum) EnsureAitumProfileConfig();
 
         progress?.Report((95, "Running final safety check…"));
-        ValidateCoreFiles(needAitum);
+        ValidateCoreFiles(needAitum, needSpout);
         progress?.Report((100, "Ready."));
     }
 
@@ -68,6 +80,12 @@ public sealed class SetupService
     {
         var root = AppPaths.FindObsRoot();
         return root is not null && FindAitumPlugin(root) is not null;
+    }
+
+    public bool IsSpoutReady()
+    {
+        var root = AppPaths.FindObsRoot();
+        return root is not null && FindSpoutPlugin(root) is not null;
     }
 
     public string? GetVerticalCanvasUuid()
@@ -190,13 +208,48 @@ public sealed class SetupService
         try { Directory.Delete(tempDir, true); } catch { }
     }
 
+    private async Task EnsureSpoutAsync(string obsRoot, IProgress<(int Percent, string Message)>? progress)
+    {
+        if (FindSpoutPlugin(obsRoot) is not null) return;
+
+        var zipPath = Path.Combine(AppPaths.CacheDirectory, $"win-spout-{SpoutVersion}-windows-x64-portable.zip");
+        if (!File.Exists(zipPath) || !await VerifySha256Async(zipPath, SpoutSha256))
+        {
+            if (File.Exists(zipPath)) File.Delete(zipPath);
+            await DownloadFileAsync(SpoutUrl, zipPath, 61, 68, progress, "Downloading transparent VTuber capture");
+        }
+        if (!await VerifySha256Async(zipPath, SpoutSha256))
+            throw new InvalidDataException("Spout2 download failed its SHA-256 verification. Nothing was installed.");
+
+        var tempDir = Path.Combine(AppPaths.CacheDirectory, "spout-temp");
+        if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
+            CopyPortableObsPlugin(tempDir, obsRoot);
+        }
+        catch
+        {
+            try { File.Delete(zipPath); } catch { }
+            throw new InvalidDataException("The Spout2 download was not a valid portable OBS plugin ZIP. Run Repair to retry the official pinned download.");
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+
+        if (FindSpoutPlugin(obsRoot) is null)
+            throw new InvalidDataException("Spout2 archive did not contain win-spout.dll in the expected portable OBS layout.");
+    }
+
     private async Task EnsureAitumAsync(string obsRoot, IProgress<(int Percent, string Message)>? progress)
     {
         if (FindAitumPlugin(obsRoot) is not null) return;
 
         var zipPath = Path.Combine(AppPaths.CacheDirectory, $"aitum-stream-suite-{AitumVersion}-windows.zip");
         if (!File.Exists(zipPath))
-            await DownloadFileAsync(AitumUrl, zipPath, 64, 73, progress, "Downloading Aitum multistream support");
+            await DownloadFileAsync(AitumUrl, zipPath, 70, 78, progress, "Downloading Aitum multistream support");
 
         var tempDir = Path.Combine(AppPaths.CacheDirectory, "aitum-temp");
         if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
@@ -211,6 +264,15 @@ public sealed class SetupService
             throw new InvalidDataException("The Aitum download was not a valid ZIP. Run Repair to retry the official pinned download.");
         }
 
+        var copied = CopyPortableObsPlugin(tempDir, obsRoot);
+        try { Directory.Delete(tempDir, true); } catch { }
+
+        if (copied == 0 || FindAitumPlugin(obsRoot) is null)
+            throw new InvalidDataException("Aitum Stream Suite archive did not contain the expected portable OBS plugin files.");
+    }
+
+    private static int CopyPortableObsPlugin(string tempDir, string obsRoot)
+    {
         var copied = 0;
         foreach (var file in Directory.EnumerateFiles(tempDir, "*", SearchOption.AllDirectories))
         {
@@ -223,13 +285,10 @@ public sealed class SetupService
             File.Copy(file, destination, overwrite: true);
             copied++;
         }
-        try { Directory.Delete(tempDir, true); } catch { }
-
-        if (copied == 0 || FindAitumPlugin(obsRoot) is null)
-            throw new InvalidDataException("Aitum Stream Suite archive did not contain the expected portable OBS plugin files.");
+        return copied;
     }
 
-    private void InstallConfigTemplates(bool repair)
+    private void InstallConfigTemplates(bool repair, bool useSpout)
     {
         if (!Directory.Exists(AppPaths.TemplatesDirectory))
             throw new DirectoryNotFoundException("The templates folder is missing from this StreamKit release.");
@@ -251,7 +310,7 @@ public sealed class SetupService
             File.WriteAllText(destination, text);
         }
 
-        EnsureCleanGameScenes(configRoot);
+        EnsureCleanGameScenes(configRoot, useSpout);
         var userIni = Path.Combine(configRoot, "user.ini");
         if (!File.Exists(userIni))
         {
@@ -260,14 +319,47 @@ public sealed class SetupService
         }
     }
 
-    private static void EnsureCleanGameScenes(string configRoot)
+    private static void EnsureObsUpdatePolicy()
     {
-        var sceneRoot = Path.Combine(configRoot, "basic", "scenes");
-        EnsureCleanGameScene(Path.Combine(sceneRoot, "BPSR_Horizontal.json"), "Discord Share", "Game Clean", "Minimal Stream Frame");
-        EnsureCleanGameScene(Path.Combine(sceneRoot, "BPSR_TikTok_Vertical.json"), "TikTok Live", "Game Clean Vertical", "TikTok Minimal Frame");
+        var configRoot = AppPaths.ObsConfigRoot();
+        if (configRoot is null) return;
+        Directory.CreateDirectory(configRoot);
+        var path = Path.Combine(configRoot, "global.ini");
+        var lines = File.Exists(path) ? File.ReadAllLines(path).ToList() : new List<string>();
+
+        var general = lines.FindIndex(line => line.Trim().Equals("[General]", StringComparison.OrdinalIgnoreCase));
+        if (general < 0)
+        {
+            if (lines.Count > 0 && !string.IsNullOrWhiteSpace(lines[^1])) lines.Add(string.Empty);
+            general = lines.Count;
+            lines.Add("[General]");
+        }
+
+        var nextSection = lines.FindIndex(general + 1, line => line.TrimStart().StartsWith("[", StringComparison.Ordinal));
+        if (nextSection < 0) nextSection = lines.Count;
+        var updateIndex = -1;
+        for (var i = general + 1; i < nextSection; i++)
+        {
+            if (lines[i].TrimStart().StartsWith("EnableAutoUpdates=", StringComparison.OrdinalIgnoreCase))
+            {
+                updateIndex = i;
+                break;
+            }
+        }
+
+        if (updateIndex >= 0) lines[updateIndex] = "EnableAutoUpdates=false";
+        else lines.Insert(nextSection, "EnableAutoUpdates=false");
+        File.WriteAllLines(path, lines);
     }
 
-    private static void EnsureCleanGameScene(string file, string baseSceneName, string cleanSceneName, string frameSourceName)
+    private static void EnsureCleanGameScenes(string configRoot, bool useSpout)
+    {
+        var sceneRoot = Path.Combine(configRoot, "basic", "scenes");
+        EnsureCleanGameScene(Path.Combine(sceneRoot, "BPSR_Horizontal.json"), "Discord Share", "Game Clean", "Minimal Stream Frame", useSpout);
+        EnsureCleanGameScene(Path.Combine(sceneRoot, "BPSR_TikTok_Vertical.json"), "TikTok Live", "Game Clean Vertical", "TikTok Minimal Frame", useSpout);
+    }
+
+    private static void EnsureCleanGameScene(string file, string baseSceneName, string cleanSceneName, string frameSourceName, bool useSpout)
     {
         if (!File.Exists(file)) return;
         var root = JsonNode.Parse(File.ReadAllText(file))?.AsObject();
@@ -307,6 +399,18 @@ public sealed class SetupService
             settings["allow_transparency"] = true;
             settings["anti_cheat_hook"] = false;
             sources.Insert(Math.Max(0, sources.IndexOf(selectedSource) + 1), vTube);
+        }
+        if (useSpout)
+        {
+            vTube["id"] = "spout_capture";
+            vTube["versioned_id"] = "spout_capture";
+            vTube["mixers"] = 0;
+            vTube["settings"] = new JsonObject
+            {
+                ["spoutsenders"] = "VTubeStudioSpout",
+                ["tickspeedlimit"] = 100,
+                ["compositemode"] = 4
+            };
         }
 
         var baseScene = FindSource(sources, baseSceneName);
@@ -361,6 +465,10 @@ public sealed class SetupService
                 items.Add(vTubeItem);
             }
         }
+        else
+        {
+            vTubeItem["source_uuid"] = vTube["uuid"]?.GetValue<string>();
+        }
 
         settingsObj["id_counter"] = items.OfType<JsonObject>().Select(x => x["id"]?.GetValue<int>() ?? 0).DefaultIfEmpty().Max();
         File.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
@@ -383,12 +491,14 @@ public sealed class SetupService
         return "x264";
     }
 
-    private static void ValidateCoreFiles(bool needAitum)
+    private static void ValidateCoreFiles(bool needAitum, bool needSpout)
     {
         if (AppPaths.FindObsExe() is null) throw new FileNotFoundException("Portable OBS is missing after setup.");
         var obsRoot = AppPaths.FindObsRoot()!;
         if (!File.Exists(Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll")))
             throw new FileNotFoundException("FloodTuber plugin is missing after setup.");
+        if (needSpout && FindSpoutPlugin(obsRoot) is null)
+            throw new FileNotFoundException("Spout2 plugin is missing after setup.");
         if (needAitum && FindAitumPlugin(obsRoot) is null)
             throw new FileNotFoundException("Aitum Stream Suite is missing after setup.");
 
@@ -403,6 +513,17 @@ public sealed class SetupService
         };
         var missing = requiredAssets.FirstOrDefault(path => !File.Exists(path));
         if (missing is not null) throw new FileNotFoundException("This StreamKit build is missing a required visual asset. Download the complete release ZIP again.", missing);
+    }
+
+    private static string? FindSpoutPlugin(string obsRoot)
+    {
+        var expected = Path.Combine(obsRoot, "obs-plugins", "64bit", "win-spout.dll");
+        if (File.Exists(expected)) return expected;
+        try
+        {
+            return Directory.EnumerateFiles(Path.Combine(obsRoot, "obs-plugins"), "win-spout.dll", SearchOption.AllDirectories).FirstOrDefault();
+        }
+        catch { return null; }
     }
 
     private static string? FindAitumPlugin(string obsRoot)

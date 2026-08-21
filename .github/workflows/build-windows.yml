@@ -285,12 +285,16 @@ jobs:
           )
           foreach($f in $required){if(-not(Test-Path $f)){throw "Missing release file: $f"}}
           @"
-          StreamKit v0.4.0
+          StreamKit v0.4.1
 
           1. Extract the whole ZIP and run BPSRStreamKit.exe.
           2. Open the game you want to stream and press Scan games if needed.
           3. Choose an Avatar, Frame Theme and Stream Mode.
-          4. Full VTuber launches VTube Studio through Steam. On first use, choose a Live2D model and webcam in VTube Studio.
+
+          Full VTuber first use:
+          - StreamKit installs Spout2 into its portable OBS automatically.
+          - In VTube Studio choose your Live2D model/webcam, enable Spout2 output, use Color Picker Background, and enable Transparent in capture.
+          - Leave the normal sender name as VTubeStudioSpout. StreamKit already prepares Premultiplied Alpha in OBS.
 
           Discord Only:
           - Click Open Discord VTuber.
@@ -302,6 +306,7 @@ jobs:
           - One-time: Aitum Stream Suite -> Settings -> Outputs -> add TikTok, select Vertical canvas, enter the TikTok server/key available to your account.
           - Later, Start All Platforms starts Discord Virtual Camera plus configured Twitch/TikTok outputs.
 
+          StreamKit intentionally disables update prompts in its portable OBS copy because OBS 32.2.1 and its plugins are pinned as a tested bundle. Update by moving to a newer StreamKit release instead of self-updating this OBS copy.
           Stream keys/login data stay in your local portable OBS/Aitum configuration.
           VTube Studio is external and is not bundled with StreamKit.
           "@ | Set-Content publish/START_HERE.txt -Encoding UTF8

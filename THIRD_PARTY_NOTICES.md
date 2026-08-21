@@ -9,7 +9,20 @@ StreamKit downloads or integrates with third-party software to provide its porta
 - Purpose: capture, compositing, encoding, virtual camera, recording, and streaming
 - Upstream licence: GNU General Public License v2 or later, with additional notices for individual bundled components where applicable
 
-StreamKit downloads the official Windows ZIP from the OBS GitHub Release and verifies it against a hard-coded SHA-256 before extraction.
+StreamKit downloads the official Windows ZIP from the OBS GitHub Release and verifies it against a hard-coded SHA-256 before extraction. The built-in updater is disabled for StreamKit's portable OBS copy so OBS and its plugins stay on the tested pinned combination; this does not alter a separate system-installed OBS copy.
+
+## Spout2 OBS plugin
+
+- Project: `Off-World-Live/obs-spout2-plugin`
+- Version currently pinned by StreamKit: `1.12.0`
+- Purpose: transparent VTube Studio video transfer into portable OBS without capturing the VTube Studio window/background/UI
+- Upstream licence: GNU General Public License v2
+
+When **Full VTuber** mode is used, StreamKit downloads the official portable Windows x64 ZIP and verifies it against the published SHA-256 before copying the portable OBS plugin layout into StreamKit's OBS folder.
+
+Pinned portable archive SHA-256:
+
+`6c5a31d6f30a44277b1955d4f85a1da1c0baa97a13075594d2bbca475104ee8a`
 
 ## FloodTuber
 
@@ -38,7 +51,7 @@ The current StreamKit source does not yet contain a hard-coded authoritative SHA
 - Steam App ID used by StreamKit: `1325860`
 - Purpose: optional face-tracked Live2D avatar source
 
-VTube Studio is **not bundled with StreamKit**. When Full VTuber mode is selected, StreamKit asks Steam to open the user's installed VTube Studio application and captures its window in OBS. The user is responsible for installing/configuring VTube Studio and for having the rights to use their chosen Live2D model.
+VTube Studio is **not bundled with StreamKit**. When Full VTuber mode is selected, StreamKit asks Steam to open the user's installed VTube Studio application. VTube Studio sends the avatar through Spout2 to the prepared OBS source. The user is responsible for installing/configuring VTube Studio and for having the rights to use their chosen Live2D model.
 
 VTube Studio remains subject to its own licence/terms and any model-specific licence terms.
 
@@ -50,7 +63,7 @@ The release is built as a self-contained .NET 8 Windows application. Microsoft .
 
 Repository visual assets under `Assets/` are separate from the third-party software licences. Only distribute assets for which you have the necessary rights.
 
-Discord, Twitch, TikTok, Steam, VTube Studio, Aitum Stream Suite, Blue Protocol: Star Resonance, OBS Studio, FloodTuber, and other third-party names/trademarks belong to their respective owners.
+Discord, Twitch, TikTok, Steam, VTube Studio, Spout2, Aitum Stream Suite, Blue Protocol: Star Resonance, OBS Studio, FloodTuber, and other third-party names/trademarks belong to their respective owners.
 
 ## Project source licence status
 
