@@ -47,7 +47,8 @@ public sealed class VTubeStudioService
             await Task.Delay(500);
         }
 
-        return new VTubeCaptureTarget("VTube Studio", "UnityWndClass", "VTube Studio.exe");
+        throw new InvalidOperationException(
+            "VTube Studio did not open a detectable window. Install/open VTube Studio in Steam, choose a Live2D model and webcam once, then retry Full VTuber mode.");
     }
 
     public VTubeCaptureTarget? TryGetCaptureTarget()
