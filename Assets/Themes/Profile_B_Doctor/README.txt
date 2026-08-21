@@ -11,4 +11,10 @@ Frames:
 - Discord_1080p.png       (1920x1080 transparent PNG)
 - TikTok_1080x1920.png    (1080x1920 transparent PNG)
 
-StreamKit v0.3.1 applies these files automatically when Profile B is selected.
+Screens:
+- Starting_1080p.jpg
+- BRB_1080p.jpg
+- Starting_TikTok_1080x1920.jpg
+- BRB_TikTok_1080x1920.jpg
+
+StreamKit v0.3.2 applies the matching avatar, frame, Starting Soon and BRB art automatically when Profile B is selected.

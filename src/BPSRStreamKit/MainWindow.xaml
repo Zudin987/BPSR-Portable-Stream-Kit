@@ -39,9 +39,9 @@
 
     <Grid Grid.Row="2">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="270"/>
+        <ColumnDefinition Width="300"/>
         <ColumnDefinition Width="16"/>
-        <ColumnDefinition Width="220"/>
+        <ColumnDefinition Width="210"/>
         <ColumnDefinition Width="16"/>
         <ColumnDefinition Width="*"/>
       </Grid.ColumnDefinitions>
@@ -50,9 +50,9 @@
         <TextBlock Text="STREAM TO" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Margin="4,0,0,8"/>
         <Border Background="#10131A" BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1" CornerRadius="14" Padding="5">
           <UniformGrid Columns="3">
-            <Button x:Name="DiscordSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Content="Discord" Click="DiscordSegment_Click" Margin="3"/>
-            <Button x:Name="TwitchSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Content="Twitch" Click="TwitchSegment_Click" Margin="3"/>
-            <Button x:Name="TikTokSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Content="TikTok" Click="TikTokSegment_Click" Margin="3"/>
+            <Button x:Name="DiscordSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Padding="8,0" Content="Discord" Click="DiscordSegment_Click" Margin="2"/>
+            <Button x:Name="TwitchSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Padding="8,0" Content="Twitch" Click="TwitchSegment_Click" Margin="2"/>
+            <Button x:Name="TikTokSegment" Style="{StaticResource SecondaryButton}" Height="44" MinWidth="0" Padding="8,0" Content="TikTok" Click="TikTokSegment_Click" Margin="2"/>
           </UniformGrid>
         </Border>
       </StackPanel>
@@ -89,7 +89,11 @@
           <TextBlock x:Name="HeroEyebrow" Text="READY" FontSize="11" FontWeight="Bold" Foreground="{StaticResource GoodBrush}"/>
           <TextBlock x:Name="HeroTitle" Text="Ready to stream" Margin="0,5,0,0" FontSize="28" FontWeight="SemiBold"/>
           <TextBlock x:Name="HeroSubtitle" Text="Choose a game, destination and theme. StreamKit handles the private OBS scene for you." Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" LineHeight="19"/>
-          <Button x:Name="MainActionButton" Style="{StaticResource PrimaryButton}" Content="Start Discord Stream" Margin="0,20,0,0" Click="MainAction_Click"/>
+          <Grid Margin="0,20,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="138"/></Grid.ColumnDefinitions>
+            <Button x:Name="MainActionButton" Grid.Column="0" Style="{StaticResource PrimaryButton}" Content="Start Discord Stream" Margin="0" Click="MainAction_Click"/>
+            <Button x:Name="StopStreamButton" Grid.Column="2" Style="{StaticResource SecondaryButton}" Height="60" MinWidth="0" Padding="12,0" Content="Stop Stream" Click="StopStream_Click" Foreground="{StaticResource BadBrush}" ToolTip="Close the portable OBS instance"/>
+          </Grid>
           <TextBlock x:Name="ActionHint" Text="Game + Mic only · no desktop capture" Margin="2,9,0,0" FontSize="11" Foreground="#BDC3D0"/>
           <StackPanel x:Name="SetupProgressPanel" Visibility="Collapsed" Margin="0,14,0,0">
             <ProgressBar x:Name="SetupProgress" Height="5" Minimum="0" Maximum="100" Background="#252A36" Foreground="{StaticResource AccentBrush}"/>
@@ -138,7 +142,7 @@
     <Grid Grid.Row="8" Margin="2,14,2,0">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <TextBlock x:Name="FooterStatus" Text="No installer · no display capture" FontSize="11" Foreground="#6F7582"/>
-      <TextBlock Grid.Column="1" Text="v0.3.1" FontSize="11" Foreground="#6F7582"/>
+      <TextBlock Grid.Column="1" Text="v0.3.2" FontSize="11" Foreground="#6F7582"/>
     </Grid>
   </Grid>
 </Window>
