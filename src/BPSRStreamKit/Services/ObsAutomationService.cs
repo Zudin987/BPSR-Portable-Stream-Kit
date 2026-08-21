@@ -16,6 +16,7 @@ public sealed class ObsAutomationService
     private const string GameInputName = "Selected Game + Audio";
     private const string VTubeInputName = "VTube Studio Avatar";
     private const string VTubeSceneName = "Game Clean";
+    private static readonly string[] VTubeHorizontalScenes = { "Game Clean", "Discord Share", "Twitch Live" };
     private const string VTubeSenderName = "VTubeStudioSpout";
     private const string SpoutFirstAvailable = "usefirstavailablesender";
     private const string NoiseFilterName = "StreamKit RNNoise";
@@ -223,11 +224,12 @@ public sealed class ObsAutomationService
         // a beginner edit OBS manually.
         foreach (var sender in new[] { VTubeSenderName, SpoutFirstAvailable })
         {
-            try
+            foreach (var scene in VTubeHorizontalScenes)
             {
-                await PrepareVTubeStudioInputAsync(VTubeSceneName, sender);
-                await SetCurrentSceneAsync(VTubeSceneName);
+                try { await PrepareVTubeStudioInputAsync(scene, sender); }
+                catch { }
             }
+            try { await SetCurrentSceneAsync(VTubeSceneName); }
             catch { }
 
             var phaseUntil = sender == VTubeSenderName
@@ -239,7 +241,12 @@ public sealed class ObsAutomationService
             {
                 try
                 {
-                    if (await HasTransparentVTubeFrameAsync()) return true;
+                    if (await HasTransparentVTubeFrameAsync())
+                    {
+                        try { await AutoFitVTubeStudioAvatarAsync(); }
+                        catch { }
+                        return true;
+                    }
                 }
                 catch { }
                 await Task.Delay(650);
@@ -337,6 +344,103 @@ public sealed class ObsAutomationService
             }
             return true;
         });
+    }
+
+    private async Task AutoFitVTubeStudioAvatarAsync()
+    {
+        var screenshot = await WithSessionAsync(s => s.RequestAsync("GetSourceScreenshot", new JsonObject
+        {
+            ["sourceName"] = VTubeInputName,
+            ["imageFormat"] = "png",
+            ["imageWidth"] = 320,
+            ["imageHeight"] = 180
+        }));
+        var imageData = screenshot?["imageData"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(imageData) || !TryGetVisibleBounds(imageData, out var left, out var top, out var right, out var bottom)) return;
+
+        await WithSessionAsync(async session =>
+        {
+            foreach (var sceneName in VTubeHorizontalScenes)
+            {
+                try
+                {
+                    var itemsResponse = await session.RequestAsync("GetSceneItemList", new JsonObject { ["sceneName"] = sceneName });
+                    var item = itemsResponse?["sceneItems"]?.AsArray()?.OfType<JsonObject>()
+                        .FirstOrDefault(x => string.Equals(x["sourceName"]?.GetValue<string>(), VTubeInputName, StringComparison.Ordinal));
+                    var sceneItemId = item?["sceneItemId"]?.GetValue<int>() ?? 0;
+                    if (sceneItemId <= 0) continue;
+
+                    var transformResponse = await session.RequestAsync("GetSceneItemTransform", new JsonObject
+                    {
+                        ["sceneName"] = sceneName, ["sceneItemId"] = sceneItemId
+                    });
+                    var transform = transformResponse?["sceneItemTransform"]?.AsObject();
+                    var sourceWidth = transform?["sourceWidth"]?.GetValue<double>() ?? 1920.0;
+                    var sourceHeight = transform?["sourceHeight"]?.GetValue<double>() ?? 1080.0;
+                    if (sourceWidth <= 0) sourceWidth = 1920.0;
+                    if (sourceHeight <= 0) sourceHeight = 1080.0;
+
+                    var cropLeft = Math.Clamp(left * sourceWidth, 0, Math.Max(0, sourceWidth - 2));
+                    var cropTop = Math.Clamp(top * sourceHeight, 0, Math.Max(0, sourceHeight - 2));
+                    var cropRight = Math.Clamp((1.0 - right) * sourceWidth, 0, Math.Max(0, sourceWidth - cropLeft - 2));
+                    var cropBottom = Math.Clamp((1.0 - bottom) * sourceHeight, 0, Math.Max(0, sourceHeight - cropTop - 2));
+
+                    await session.RequestAsync("SetSceneItemTransform", new JsonObject
+                    {
+                        ["sceneName"] = sceneName,
+                        ["sceneItemId"] = sceneItemId,
+                        ["sceneItemTransform"] = new JsonObject
+                        {
+                            ["positionX"] = 20.0, ["positionY"] = 490.0, ["alignment"] = 5,
+                            ["cropLeft"] = cropLeft, ["cropTop"] = cropTop, ["cropRight"] = cropRight, ["cropBottom"] = cropBottom,
+                            ["boundsType"] = "OBS_BOUNDS_SCALE_INNER", ["boundsAlignment"] = 5,
+                            ["boundsWidth"] = 520.0, ["boundsHeight"] = 570.0
+                        }
+                    });
+                    await session.RequestAsync("SetSceneItemEnabled", new JsonObject
+                    {
+                        ["sceneName"] = sceneName, ["sceneItemId"] = sceneItemId, ["sceneItemEnabled"] = true
+                    });
+                }
+                catch { }
+            }
+            return true;
+        });
+    }
+
+    private static bool TryGetVisibleBounds(string dataUri, out double left, out double top, out double right, out double bottom)
+    {
+        left = 0; top = 0; right = 1; bottom = 1;
+        try
+        {
+            var comma = dataUri.IndexOf(',');
+            var base64 = comma >= 0 ? dataUri[(comma + 1)..] : dataUri;
+            var bytes = Convert.FromBase64String(base64);
+            using var stream = new MemoryStream(bytes);
+            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            if (decoder.Frames.Count == 0) return false;
+            var bitmap = new FormatConvertedBitmap(decoder.Frames[0], PixelFormats.Bgra32, null, 0);
+            var width = bitmap.PixelWidth; var height = bitmap.PixelHeight;
+            if (width <= 0 || height <= 0) return false;
+            var stride = width * 4; var pixels = new byte[stride * height];
+            bitmap.CopyPixels(pixels, stride, 0);
+            var minX = width; var minY = height; var maxX = -1; var maxY = -1; var visible = 0;
+            for (var y = 0; y < height; y++) for (var x = 0; x < width; x++)
+            {
+                var alpha = pixels[(y * stride) + (x * 4) + 3];
+                if (alpha <= 18) continue;
+                visible++; minX = Math.Min(minX, x); maxX = Math.Max(maxX, x); minY = Math.Min(minY, y); maxY = Math.Max(maxY, y);
+            }
+            if (visible < 20 || maxX < minX || maxY < minY) return false;
+            var padX = Math.Max(3, (int)Math.Round((maxX - minX + 1) * 0.06));
+            var padY = Math.Max(3, (int)Math.Round((maxY - minY + 1) * 0.04));
+            minX = Math.Max(0, minX - padX); maxX = Math.Min(width - 1, maxX + padX);
+            minY = Math.Max(0, minY - padY); maxY = Math.Min(height - 1, maxY + padY);
+            left = (double)minX / width; top = (double)minY / height;
+            right = (double)(maxX + 1) / width; bottom = (double)(maxY + 1) / height;
+            return right - left > 0.02 && bottom - top > 0.02;
+        }
+        catch { return false; }
     }
 
     private async Task<bool> HasTransparentVTubeFrameAsync()

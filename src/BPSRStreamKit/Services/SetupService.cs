@@ -464,6 +464,12 @@ public sealed class SetupService
 
         var baseScene = FindSource(sources, baseSceneName);
         if (baseScene is null) return;
+        EnsureVTubeSceneItem(baseScene, vTube);
+        if (file.EndsWith("BPSR_Horizontal.json", StringComparison.OrdinalIgnoreCase))
+        {
+            var twitchLive = FindSource(sources, "Twitch Live");
+            if (twitchLive is not null) EnsureVTubeSceneItem(twitchLive, vTube);
+        }
         var cleanScene = FindSource(sources, cleanSceneName);
         if (cleanScene is null)
         {
@@ -521,6 +527,49 @@ public sealed class SetupService
 
         settingsObj["id_counter"] = items.OfType<JsonObject>().Select(x => x["id"]?.GetValue<int>() ?? 0).DefaultIfEmpty().Max();
         File.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+    }
+
+    private static void EnsureVTubeSceneItem(JsonObject scene, JsonObject vTube)
+    {
+        var settings = scene["settings"]?.AsObject() ?? new JsonObject();
+        scene["settings"] = settings;
+        var items = settings["items"]?.AsArray() ?? new JsonArray();
+        settings["items"] = items;
+
+        var existing = items.OfType<JsonObject>()
+            .FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), "VTube Studio Avatar", StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            existing["source_uuid"] = vTube["uuid"]?.GetValue<string>();
+            return;
+        }
+
+        var template = items.OfType<JsonObject>()
+            .FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), "FloodTuber Avatar", StringComparison.Ordinal))
+            ?? items.OfType<JsonObject>().FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), "Selected Game + Audio", StringComparison.Ordinal))
+            ?? items.OfType<JsonObject>().FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), "BPSR Game + Audio", StringComparison.Ordinal));
+
+        var item = template?.DeepClone().AsObject() ?? new JsonObject();
+        item["name"] = "VTube Studio Avatar";
+        item["source_uuid"] = vTube["uuid"]?.GetValue<string>();
+        item["visible"] = false;
+        item["locked"] = true;
+        item["rot"] = 0.0;
+        item["align"] = 5;
+        item["bounds_type"] = 2;
+        item["bounds_align"] = 5;
+        item["bounds_crop"] = false;
+        item["crop_left"] = 0;
+        item["crop_top"] = 0;
+        item["crop_right"] = 0;
+        item["crop_bottom"] = 0;
+        item["pos"] = new JsonObject { ["x"] = 20.0, ["y"] = 490.0 };
+        item["scale"] = new JsonObject { ["x"] = 1.0, ["y"] = 1.0 };
+        item["bounds"] = new JsonObject { ["x"] = 520.0, ["y"] = 570.0 };
+        item["scale_filter"] = "lanczos";
+        item["id"] = items.OfType<JsonObject>().Select(x => x["id"]?.GetValue<int>() ?? 0).DefaultIfEmpty().Max() + 1;
+        items.Add(item);
+        settings["id_counter"] = items.OfType<JsonObject>().Select(x => x["id"]?.GetValue<int>() ?? 0).DefaultIfEmpty().Max();
     }
 
     private static JsonObject? FindSource(JsonArray sources, string name) => sources.OfType<JsonObject>()
