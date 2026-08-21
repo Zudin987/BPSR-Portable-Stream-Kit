@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Management;
@@ -35,6 +36,13 @@ public sealed class SetupService
         bool needAitum = false, bool needSpout = false)
     {
         Directory.CreateDirectory(AppPaths.CacheDirectory);
+
+        if (repair)
+        {
+            progress?.Report((1, "Closing the old streaming engine…"));
+            StopPortableObsForRepair();
+            await Task.Delay(900);
+        }
 
         progress?.Report((3, "Checking stream engine…"));
         var obsExe = AppPaths.FindObsExe();
@@ -303,7 +311,11 @@ public sealed class SetupService
             var relative = Path.GetRelativePath(AppPaths.TemplatesDirectory, template);
             var destination = Path.Combine(configRoot, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            if (File.Exists(destination)) continue;
+            var normalized = relative.Replace('\\', '/');
+            var generatedScene = normalized.Equals("basic/scenes/BPSR_Horizontal.json", StringComparison.OrdinalIgnoreCase)
+                                 || normalized.Equals("basic/scenes/BPSR_TikTok_Vertical.json", StringComparison.OrdinalIgnoreCase);
+            if (File.Exists(destination) && !(repair && generatedScene)) continue;
+            if (repair && generatedScene && File.Exists(destination)) BackupGeneratedScene(destination);
             var text = File.ReadAllText(template)
                 .Replace("__PACKROOT__", portableRoot, StringComparison.Ordinal)
                 .Replace("__ENCODER__", encoder, StringComparison.Ordinal);
@@ -316,6 +328,43 @@ public sealed class SetupService
         {
             File.WriteAllText(userIni,
                 "[Basic]\nProfile=Discord Share\nProfileDir=Discord Share\nSceneCollection=BPSR Horizontal\nSceneCollectionFile=BPSR_Horizontal\n");
+        }
+    }
+
+    private static void BackupGeneratedScene(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(AppPaths.BackupDirectory);
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var name = Path.GetFileNameWithoutExtension(path);
+            File.Copy(path, Path.Combine(AppPaths.BackupDirectory, $"{name}-{stamp}.json"), overwrite: true);
+        }
+        catch { }
+    }
+
+    private static void StopPortableObsForRepair()
+    {
+        var obsExe = AppPaths.FindObsExe();
+        if (string.IsNullOrWhiteSpace(obsExe)) return;
+        var expectedPath = Path.GetFullPath(obsExe);
+        var processName = Path.GetFileNameWithoutExtension(obsExe);
+
+        foreach (var process in Process.GetProcessesByName(processName))
+        {
+            try
+            {
+                var actualPath = process.MainModule?.FileName;
+                if (string.IsNullOrWhiteSpace(actualPath) ||
+                    !Path.GetFullPath(actualPath).Equals(expectedPath, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!process.CloseMainWindow() || !process.WaitForExit(3000))
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(2500);
+                }
+            }
+            catch { }
+            finally { process.Dispose(); }
         }
     }
 
