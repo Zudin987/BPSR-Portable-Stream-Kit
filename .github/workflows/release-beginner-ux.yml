@@ -29,7 +29,7 @@ jobs:
         shell: pwsh
         run: |
           @"
-          StreamKit v2.0.1 - Beginner-Friendly UI
+          StreamKit v2.0.2 - Beginner-Friendly UI
 
           1. Open your game.
           2. Run BPSRStreamKit.exe and choose the game + avatar.
@@ -44,9 +44,12 @@ jobs:
           - StreamKit opens VTube Studio through Steam automatically.
           - Turn on the VTube Studio output switch named Spout2 output.
           - Backgrounds -> Color Picker Background -> Transparent in capture.
-          - Click Check my avatar in StreamKit. StreamKit verifies the transparent avatar before continuing.
+          - Click Check my avatar in StreamKit. StreamKit now repairs/recreates the OBS Spout2 avatar source automatically and checks the actual video.
+          - If the normal VTubeStudioSpout sender is not available, StreamKit automatically tries the active Spout sender.
 
-          If you moved StreamKit to a different folder, Fix setup automatically repairs old OBS image paths.
+          Fix setup:
+          - Fix setup closes only StreamKit's portable OBS, backs up the generated scene JSON, rebuilds the StreamKit scenes, and keeps your account/stream settings.
+          - This also repairs old paths after moving or extracting StreamKit into a different folder.
 
           Twitch + TikTok, first time only:
           - StreamKit shows exact account-connection steps in the app.
@@ -88,4 +91,4 @@ jobs:
             gh release delete $version --cleanup-tag --yes
           }
           $target = ((git ls-remote origin refs/heads/main) -split "`t")[0]
-          gh release create $version StreamKit-BeginnerUX.zip --target $target --title "$version - StreamKit Beginner UX" --notes "Fixes VTube Studio auto-launch, transparent avatar recovery, old portable OBS asset paths, and beginner dropdown labels."
+          gh release create $version StreamKit-BeginnerUX.zip --target $target --title "$version - StreamKit Beginner UX" --notes "Fixes Check my avatar and Fix setup: StreamKit now rebuilds generated OBS scenes safely, restarts stale portable OBS before editing, self-heals the Spout2 avatar source at runtime, and falls back to the active Spout sender automatically."
