@@ -46,6 +46,8 @@ public partial class MainWindow : Window
     private bool _loadingGames;
     private bool _loadingTheme;
     private bool _loadingAvatar;
+    private bool _streamActive;
+    private bool _micMuted;
 
     private GameTarget? SelectedGame => GameCombo.SelectedItem as GameTarget;
     private ThemeChoice? SelectedThemeChoice => ThemeCombo.SelectedItem as ThemeChoice;
@@ -53,7 +55,7 @@ public partial class MainWindow : Window
     private static string ThemePreferenceFile => Path.Combine(AppPaths.Root, ".streamkit-theme");
     private static string AvatarPreferenceFile => Path.Combine(AppPaths.Root, ".streamkit-avatar");
     private static string ModePreferenceFile => Path.Combine(AppPaths.Root, ".streamkit-mode");
-    private static string SpoutOnboardingFile => Path.Combine(AppPaths.Root, "user-data", "vtube-spout-onboarding-v1.txt");
+    private static string SpoutOnboardingFile => Path.Combine(AppPaths.Root, "user-data", "vtube-spout-onboarding-v2.txt");
 
     public MainWindow()
     {
@@ -87,6 +89,7 @@ public partial class MainWindow : Window
         ApplyModeSelection();
         await RefreshGameChoicesAsync(preserveSelection: false);
         await RefreshStatusAsync();
+        UpdateStreamControls();
         _statusTimer.Start();
     }
 
@@ -154,7 +157,19 @@ public partial class MainWindow : Window
         }
 
         SetStatus(AudioStatusDot, AudioStatusText, state.AudioIsolationReady,
-            "Game + Mic isolated", "Private audio setup needed");
+            "Private game + mic routing ready", "Private audio setup needed");
+
+        if (_streamActive)
+        {
+            HeroEyebrow.Text = "STREAM READY";
+            HeroEyebrow.Foreground = (Brush)FindResource("GoodBrush");
+            HeroTitle.Text = _selectedMode == StreamMode.DiscordOnly ? "Discord share is prepared" : "Stream controls are live";
+            HeroSubtitle.Text = _selectedMode == StreamMode.DiscordOnly
+                ? "Share the OBS Windowed Projector (Program) in Discord. Its audio path contains game audio only; keep your normal Discord mic enabled."
+                : "Twitch/TikTok receive selected-game audio + your RNNoise microphone. Discord/system audio is deliberately excluded.";
+            MainActionButton.Content = "Reopen Discord Share";
+            return;
+        }
 
         var needsSetup = !state.ObsReady
                          || (_selectedAvatar == AvatarMode.VTubeStudio && !spoutReady)
@@ -166,8 +181,8 @@ public partial class MainWindow : Window
             HeroEyebrow.Foreground = (Brush)FindResource("WarnBrush");
             HeroTitle.Text = "One click from ready";
             HeroSubtitle.Text = _selectedMode == StreamMode.AllPlatforms
-                ? "StreamKit will prepare portable OBS, Spout2 VTuber capture, Aitum vertical/multistream support and your selected avatar mode."
-                : "StreamKit will prepare portable OBS, transparent Spout2 VTuber capture, the selected frame and your avatar mode automatically.";
+                ? "StreamKit will prepare portable OBS, Spout2 VTuber capture, Aitum vertical/multistream support and private audio routing."
+                : "StreamKit will prepare portable OBS, transparent Spout2 VTuber capture, a Discord share projector and private game-only share audio.";
             MainActionButton.Content = "Set up & " + GetActionLabel();
             FooterStatus.Text = "First-run setup stays inside this folder";
             return;
@@ -188,8 +203,8 @@ public partial class MainWindow : Window
         HeroEyebrow.Foreground = (Brush)FindResource("GoodBrush");
         HeroTitle.Text = _selectedMode == StreamMode.DiscordOnly ? "Ready for Discord" : "Ready for all platforms";
         HeroSubtitle.Text = _selectedMode == StreamMode.DiscordOnly
-            ? $"{gameName} → OBS Virtual Camera with {SelectedAvatarChoice?.DisplayName ?? "Full VTuber"} and {SelectedThemeChoice?.DisplayName ?? "Profile A"}."
-            : $"{gameName} → Discord camera + Twitch 16:9 + TikTok 9:16 from one OBS instance.";
+            ? $"{gameName} → clean OBS projector with {SelectedAvatarChoice?.DisplayName ?? "Full VTuber"}. Game audio is included; OBS mic is excluded to avoid double voice."
+            : $"{gameName} → Discord projector + Twitch 16:9 + TikTok 9:16. Only game audio + your filtered mic reach public streams.";
         FooterStatus.Text = $"Ready · {SelectedAvatarChoice?.DisplayName} · {SelectedThemeChoice?.DisplayName}";
     }
 
@@ -203,6 +218,23 @@ public partial class MainWindow : Window
     private async Task StartAsync()
     {
         if (_busy) return;
+
+        if (_streamActive)
+        {
+            try
+            {
+                SetBusy(true);
+                await _automation.OpenProgramProjectorAsync();
+                FooterStatus.Text = "Discord share window reopened · choose Windowed Projector (Program) in Discord";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Open Discord share", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally { SetBusy(false); }
+            return;
+        }
+
         try
         {
             SetBusy(true);
@@ -232,7 +264,7 @@ public partial class MainWindow : Window
                 SetupStatusText.Text = "Opening VTube Studio through Steam…";
                 vTubeTarget = await _vTubeStudio.LaunchAndWaitAsync();
                 SetupProgressPanel.Visibility = Visibility.Collapsed;
-                ShowSpoutOnboardingOnce();
+                ShowSpoutOnboardingIfNeeded();
             }
             SetupProgressPanel.Visibility = Visibility.Collapsed;
 
@@ -242,15 +274,23 @@ public partial class MainWindow : Window
 
             _catalog.Save(game);
             _catalog.SaveLastSelectedProcess(game.ProcessName);
+            AudioPrivacyService.HardenPortableObsConfig();
 
             if (_selectedMode == StreamMode.DiscordOnly)
             {
                 _obs.Launch(StreamMode.DiscordOnly, game, _selectedTheme, _selectedAvatar, vTubeTarget);
-                if (await _automation.WaitUntilReadyAsync(TimeSpan.FromSeconds(25)))
-                {
-                    try { await _automation.StartVirtualCameraAsync(); } catch { }
-                }
-                FooterStatus.Text = "Discord ready · choose OBS Virtual Camera in Discord · use your normal Discord mic";
+                if (!await _automation.WaitUntilReadyAsync(TimeSpan.FromSeconds(25)))
+                    throw new InvalidOperationException("OBS opened, but StreamKit could not reach its local automation server.");
+
+                await _automation.ConfigureDiscordShareAudioAsync(alsoStreamingPlatforms: false);
+                await VerifyVTubeStudioOutputAsync();
+                await _automation.SetCurrentSceneAsync("Game Clean");
+                await _automation.OpenProgramProjectorAsync();
+
+                _micMuted = true;
+                _streamActive = true;
+                UpdateStreamControls();
+                FooterStatus.Text = "Discord ready · share Windowed Projector (Program) · game audio only · OBS mic excluded";
                 return;
             }
 
@@ -272,32 +312,38 @@ public partial class MainWindow : Window
             }
 
             _obs.PrepareAllPlatforms(verticalUuid, game, _selectedTheme, _selectedAvatar, vTubeTarget);
+            AudioPrivacyService.HardenPortableObsConfig();
             _obs.Launch(StreamMode.AllPlatforms, game, _selectedTheme, _selectedAvatar, vTubeTarget);
             var automationReady = await _automation.WaitUntilReadyAsync(TimeSpan.FromSeconds(30));
-            if (automationReady)
-            {
-                try { await _automation.SwitchVerticalSceneAsync(); } catch { }
-                try { await _automation.StartVirtualCameraAsync(); } catch { }
-            }
+            if (!automationReady)
+                throw new InvalidOperationException("OBS opened, but StreamKit could not reach the local OBS automation server.");
+
+            await _automation.ConfigureDiscordShareAudioAsync(alsoStreamingPlatforms: true);
+            try { await _automation.StartVirtualCameraAsync(); } catch { }
+            await VerifyVTubeStudioOutputAsync();
 
             if (!_setup.HasAitumStreamOutput())
             {
-                FooterStatus.Text = "One-time account setup needed · OBS is ready and Discord Virtual Camera is on";
+                FooterStatus.Text = "One-time account setup needed · private audio routing is already prepared";
                 MessageBox.Show(this,
-                    "Your layouts are ready. One-time account setup is still needed:\n\n" +
+                    "Your layouts and private audio routing are ready. One-time account setup is still needed:\n\n" +
                     "1. OBS Settings → Stream → connect Twitch.\n" +
                     "2. Aitum Stream Suite → Settings → Outputs → Add Stream → TikTok.\n" +
                     "3. Choose the Vertical canvas and enter the TikTok server/key your account provides.\n\n" +
-                    "After that, close OBS. Next time 'Start All Platforms' starts Twitch + TikTok automatically, while Discord uses OBS Virtual Camera.",
+                    "Desktop audio is disabled, so Discord friends are not sent to Twitch/TikTok. Your OBS mic uses RNNoise by default.\n\n" +
+                    "After setup, close OBS. Next time Start All Platforms starts everything together.",
                     "One-time Twitch / TikTok setup", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            if (!automationReady)
-                throw new InvalidOperationException("OBS opened, but StreamKit could not reach the local OBS automation server.");
-
+            await _automation.SwitchScenesAsync("Starting Soon", "Vertical Starting Soon");
             await _automation.StartAllStreamsAsync();
-            FooterStatus.Text = "Live controls sent · Discord camera + Twitch horizontal + TikTok vertical";
+            await _automation.OpenProgramProjectorAsync();
+
+            _micMuted = false;
+            _streamActive = true;
+            UpdateStreamControls();
+            FooterStatus.Text = "Streaming · Starting Soon · Discord projector + Twitch + TikTok · Discord voice excluded";
         }
         catch (Exception ex)
         {
@@ -315,7 +361,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowSpoutOnboardingOnce()
+    private void ShowSpoutOnboardingIfNeeded()
     {
         try
         {
@@ -325,28 +371,82 @@ public partial class MainWindow : Window
                 "StreamKit already installed Spout2 into its portable OBS. Do these VTube Studio steps once:\n\n" +
                 "1. In VTube Studio settings, turn ON Spout2 output.\n" +
                 "2. Select the Color Picker Background.\n" +
-                "3. Set it to transparent black and enable Transparent in capture.\n" +
+                "3. Enable Transparent in capture.\n" +
                 "4. Leave the sender name as VTubeStudioSpout.\n\n" +
-                "Then press OK. StreamKit's OBS source is already set to Spout2 with Premultiplied Alpha, so the VTube Studio background/UI will not be shown.",
+                "Press OK when done. StreamKit will now TEST the actual Spout output before it lets the stream continue.",
                 "One-time Full VTuber setup", MessageBoxButton.OK, MessageBoxImage.Information);
-
-            Directory.CreateDirectory(Path.GetDirectoryName(SpoutOnboardingFile)!);
-            File.WriteAllText(SpoutOnboardingFile, "VTube Studio Spout2 onboarding shown.");
         }
         catch { }
+    }
+
+    private async Task VerifyVTubeStudioOutputAsync()
+    {
+        if (_selectedAvatar != AvatarMode.VTubeStudio) return;
+
+        SetupProgressPanel.Visibility = Visibility.Visible;
+        SetupProgress.Value = 100;
+        SetupStatusText.Text = "Checking VTube Studio transparent Spout output…";
+        var ready = await _automation.WaitForVTubeStudioVideoAsync(TimeSpan.FromSeconds(20));
+        SetupProgressPanel.Visibility = Visibility.Collapsed;
+
+        if (!ready)
+        {
+            throw new InvalidOperationException(
+                "VTube Studio is open, but StreamKit cannot see a transparent VTubeStudioSpout frame yet. " +
+                "In VTube Studio turn on Spout2 output, use the Color Picker Background, enable Transparent in capture, " +
+                "and keep the sender name VTubeStudioSpout. Then retry.");
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(SpoutOnboardingFile)!);
+            File.WriteAllText(SpoutOnboardingFile, "VTubeStudioSpout video and transparency verified by StreamKit.");
+        }
+        catch { }
+    }
+
+    private async Task SwitchSceneAsync(string horizontal, string vertical, string label)
+    {
+        if (!_streamActive || _busy) return;
+        try
+        {
+            SetBusy(true);
+            await _automation.SwitchScenesAsync(horizontal, _selectedMode == StreamMode.AllPlatforms ? vertical : null);
+            FooterStatus.Text = _selectedMode == StreamMode.AllPlatforms
+                ? $"Streaming · {label} · horizontal + TikTok vertical switched together"
+                : $"Discord share · {label}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Change stream scene", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally { SetBusy(false); }
+    }
+
+    private void UpdateStreamControls()
+    {
+        StreamControlsPanel.Visibility = _streamActive ? Visibility.Visible : Visibility.Collapsed;
+        StartingSoonButton.IsEnabled = _streamActive && !_busy;
+        LiveButton.IsEnabled = _streamActive && !_busy;
+        BrbButton.IsEnabled = _streamActive && !_busy;
+        MicMuteButton.IsEnabled = _streamActive && !_busy && _selectedMode == StreamMode.AllPlatforms;
+        MicMuteButton.Content = _selectedMode == StreamMode.DiscordOnly
+            ? "Mic stays in Discord"
+            : (_micMuted ? "Unmute Mic" : "Mute Mic");
+        MainActionButton.Content = _streamActive ? "Reopen Discord Share" : GetActionLabel();
     }
 
     private void ApplyModeSelection()
     {
         SetSegment(DiscordOnlySegment, _selectedMode == StreamMode.DiscordOnly);
         SetSegment(AllPlatformsSegment, _selectedMode == StreamMode.AllPlatforms);
-        MainActionButton.Content = GetActionLabel();
+        MainActionButton.Content = _streamActive ? "Reopen Discord Share" : GetActionLabel();
         ActionHint.Text = _selectedMode == StreamMode.DiscordOnly
-            ? "OBS Virtual Camera starts automatically · in Discord choose OBS Virtual Camera as Camera"
-            : "Discord camera + Twitch horizontal + TikTok vertical · Twitch/TikTok login is one-time only";
+            ? "StreamKit opens a Windowed Projector automatically · share that window in Discord with sound"
+            : "Discord projector + Twitch horizontal + TikTok vertical · scene buttons switch all layouts together";
         PrivacyText.Text = _selectedMode == StreamMode.DiscordOnly
-            ? "Discord receives video through OBS Virtual Camera. Keep your normal microphone selected in Discord; Virtual Camera does not carry game audio."
-            : "Discord gets OBS Virtual Camera. Twitch uses the 16:9 main canvas. TikTok uses Aitum's separate 9:16 canvas. Stream keys remain only in local portable OBS/Aitum files.";
+            ? "Discord projector audio contains the selected game only. OBS mic is muted so your voice is not doubled; keep your normal Discord microphone enabled."
+            : "Twitch/TikTok receive selected-game audio + your RNNoise microphone. Desktop/system audio is disabled, so Discord friends and notification sounds are excluded. Discord projector receives game audio, not the OBS mic.";
     }
 
     private void SetSegment(Button button, bool selected)
@@ -355,7 +455,7 @@ public partial class MainWindow : Window
         button.Foreground = selected ? Brushes.White : (Brush)FindResource("MutedBrush");
     }
 
-    private string GetActionLabel() => _selectedMode == StreamMode.DiscordOnly ? "Open Discord VTuber" : "Start All Platforms";
+    private string GetActionLabel() => _selectedMode == StreamMode.DiscordOnly ? "Open Discord Share" : "Start All Platforms";
 
     private void UpdateGameCard()
     {
@@ -407,18 +507,46 @@ public partial class MainWindow : Window
     {
         _busy = busy;
         MainActionButton.IsEnabled = !busy;
-        DiscordOnlySegment.IsEnabled = !busy;
-        AllPlatformsSegment.IsEnabled = !busy;
-        AvatarCombo.IsEnabled = !busy;
-        ThemeCombo.IsEnabled = !busy;
-        GameCombo.IsEnabled = !busy;
+        DiscordOnlySegment.IsEnabled = !busy && !_streamActive;
+        AllPlatformsSegment.IsEnabled = !busy && !_streamActive;
+        AvatarCombo.IsEnabled = !busy && !_streamActive;
+        ThemeCombo.IsEnabled = !busy && !_streamActive;
+        GameCombo.IsEnabled = !busy && !_streamActive;
+        StartingSoonButton.IsEnabled = !busy && _streamActive;
+        LiveButton.IsEnabled = !busy && _streamActive;
+        BrbButton.IsEnabled = !busy && _streamActive;
+        MicMuteButton.IsEnabled = !busy && _streamActive && _selectedMode == StreamMode.AllPlatforms;
         Cursor = busy ? System.Windows.Input.Cursors.Wait : System.Windows.Input.Cursors.Arrow;
     }
 
     private async void MainAction_Click(object sender, RoutedEventArgs e) => await StartAsync();
+    private async void StartingSoon_Click(object sender, RoutedEventArgs e) => await SwitchSceneAsync("Starting Soon", "Vertical Starting Soon", "Starting Soon");
+    private async void Live_Click(object sender, RoutedEventArgs e) => await SwitchSceneAsync("Game Clean", "Vertical Live", "Live");
+    private async void Brb_Click(object sender, RoutedEventArgs e) => await SwitchSceneAsync("BRB", "Vertical BRB", "BRB");
+
+    private async void MicMute_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_streamActive || _selectedMode != StreamMode.AllPlatforms || _busy) return;
+        try
+        {
+            SetBusy(true);
+            _micMuted = await _automation.ToggleMicMutedAsync();
+            FooterStatus.Text = _micMuted ? "OBS mic muted for Twitch/TikTok" : "OBS mic live · RNNoise enabled";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Microphone", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            SetBusy(false);
+            UpdateStreamControls();
+        }
+    }
 
     private async void DiscordOnlySegment_Click(object sender, RoutedEventArgs e)
     {
+        if (_streamActive) return;
         _selectedMode = StreamMode.DiscordOnly;
         SavePreferences();
         ApplyModeSelection();
@@ -427,6 +555,7 @@ public partial class MainWindow : Window
 
     private async void AllPlatformsSegment_Click(object sender, RoutedEventArgs e)
     {
+        if (_streamActive) return;
         _selectedMode = StreamMode.AllPlatforms;
         SavePreferences();
         ApplyModeSelection();
@@ -435,7 +564,7 @@ public partial class MainWindow : Window
 
     private async void AvatarCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loadingAvatar || SelectedAvatarChoice is not { } choice) return;
+        if (_loadingAvatar || _streamActive || SelectedAvatarChoice is not { } choice) return;
         _selectedAvatar = choice.Mode;
         SavePreferences();
         UpdateAvatarCard();
@@ -445,7 +574,7 @@ public partial class MainWindow : Window
 
     private async void ThemeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loadingTheme || SelectedThemeChoice is not { } choice) return;
+        if (_loadingTheme || _streamActive || SelectedThemeChoice is not { } choice) return;
         _selectedTheme = choice.Theme;
         SavePreferences();
         UpdateThemeCard();
@@ -454,7 +583,7 @@ public partial class MainWindow : Window
 
     private async void GameCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loadingGames) return;
+        if (_loadingGames || _streamActive) return;
         UpdateGameCard();
         if (SelectedGame is { } game)
         {
@@ -466,7 +595,7 @@ public partial class MainWindow : Window
 
     private async void ScanGames_Click(object sender, RoutedEventArgs e)
     {
-        if (_busy) return;
+        if (_busy || _streamActive) return;
         await RefreshGameChoicesAsync(preserveSelection: true);
         await RefreshStatusAsync();
     }
@@ -474,7 +603,7 @@ public partial class MainWindow : Window
     private async void Refresh_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
-        await RefreshGameChoicesAsync(preserveSelection: true);
+        if (!_streamActive) await RefreshGameChoicesAsync(preserveSelection: true);
         await RefreshStatusAsync();
     }
 
@@ -485,7 +614,7 @@ public partial class MainWindow : Window
 
     private async void Repair_Click(object sender, RoutedEventArgs e)
     {
-        if (_busy) return;
+        if (_busy || _streamActive) return;
         try
         {
             SetBusy(true);
@@ -498,7 +627,8 @@ public partial class MainWindow : Window
             await _setup.EnsureReadyAsync(progress, repair: true,
                 needAitum: _selectedMode == StreamMode.AllPlatforms,
                 needSpout: _selectedAvatar == AvatarMode.VTubeStudio);
-            FooterStatus.Text = "Repair complete · local OBS/Aitum account settings preserved";
+            AudioPrivacyService.HardenPortableObsConfig();
+            FooterStatus.Text = "Repair complete · local account settings preserved · private audio routing restored";
         }
         catch (Exception ex)
         {
@@ -533,11 +663,15 @@ public partial class MainWindow : Window
             SetBusy(true);
             await _automation.StopAllStreamsAsync();
             await _automation.StopVirtualCameraAsync();
+            await _automation.RestoreNormalAudioMonitoringAsync();
         }
         catch { }
         finally
         {
             _obs.Stop();
+            _streamActive = false;
+            _micMuted = false;
+            UpdateStreamControls();
             FooterStatus.Text = "Stream stopped · VTube Studio left open";
             SetBusy(false);
             await RefreshStatusAsync();

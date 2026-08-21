@@ -46,11 +46,14 @@ public sealed class ObsService
         switch (mode)
         {
             case StreamMode.DiscordOnly:
+                // Discord screen-share mode uses a clean Program projector instead of Virtual Camera.
+                // The launcher opens that projector after OBS WebSocket is ready.
                 AddSelection(startInfo, "Discord Share", "BPSR Horizontal", "Game Clean");
-                startInfo.ArgumentList.Add("--startvirtualcam");
                 break;
             case StreamMode.AllPlatforms:
                 AddSelection(startInfo, "Twitch 1080p", "BPSR Horizontal", "Game Clean");
+                // Keep Virtual Camera available as an optional Discord fallback while the default
+                // Discord workflow is the projector opened by StreamKit.
                 startInfo.ArgumentList.Add("--startvirtualcam");
                 break;
         }
@@ -269,9 +272,12 @@ public sealed class ObsService
             ["Selected Game + Audio"] = "Vertical - Selected Game + Audio",
             ["TikTok Minimal Frame"] = "Vertical - Stream Frame",
             ["FloodTuber Avatar"] = "Vertical - PNG Avatar",
-            ["VTube Studio Avatar"] = "Vertical - VTube Studio Avatar"
+            ["VTube Studio Avatar"] = "Vertical - VTube Studio Avatar",
+            ["Starting Screen"] = "Vertical - Starting Screen",
+            ["BRB Screen"] = "Vertical - BRB Screen"
         };
-        var removeNames = names.Values.Append("Vertical Live").ToHashSet(StringComparer.Ordinal);
+        var sceneNames = new[] { "Vertical Live", "Vertical Starting Soon", "Vertical BRB" };
+        var removeNames = names.Values.Concat(sceneNames).ToHashSet(StringComparer.Ordinal);
         for (var i = dst.Count - 1; i >= 0; i--)
         {
             var name = dst[i]?["name"]?.GetValue<string>();
@@ -291,37 +297,51 @@ public sealed class ObsService
             dst.Add(clone);
         }
 
-        var sourceScene = FindSource(src, "Game Clean Vertical") ?? throw new InvalidOperationException("Vertical clean scene is missing. Use Repair once.");
-        var verticalScene = sourceScene.DeepClone().AsObject();
-        verticalScene["name"] = "Vertical Live";
-        verticalScene["uuid"] = Guid.NewGuid().ToString();
-        verticalScene["canvas_uuid"] = canvasUuid;
-        verticalScene["hotkeys"] = new JsonObject { ["OBSBasic.SelectScene"] = new JsonArray() };
-        var items = verticalScene["settings"]?["items"]?.AsArray() ?? new JsonArray();
-        verticalScene["settings"]!["items"] = items;
-
-        for (var i = items.Count - 1; i >= 0; i--)
+        void AddScene(string sourceSceneName, string destinationSceneName)
         {
-            if (items[i] is not JsonObject item) continue;
-            var oldName = item["name"]?.GetValue<string>();
-            if (oldName is null || !names.TryGetValue(oldName, out var newName))
+            var sourceScene = FindSource(src, sourceSceneName) ?? throw new InvalidOperationException($"Vertical scene '{sourceSceneName}' is missing. Use Repair once.");
+            var scene = sourceScene.DeepClone().AsObject();
+            scene["name"] = destinationSceneName;
+            scene["uuid"] = Guid.NewGuid().ToString();
+            scene["canvas_uuid"] = canvasUuid;
+            scene["hotkeys"] = new JsonObject { ["OBSBasic.SelectScene"] = new JsonArray() };
+            var settings = scene["settings"]?.AsObject() ?? new JsonObject();
+            scene["settings"] = settings;
+            var items = settings["items"]?.AsArray() ?? new JsonArray();
+            settings["items"] = items;
+
+            for (var i = items.Count - 1; i >= 0; i--)
             {
-                items.RemoveAt(i);
-                continue;
+                if (items[i] is not JsonObject item) continue;
+                var oldName = item["name"]?.GetValue<string>();
+                if (oldName is null || !names.TryGetValue(oldName, out var newName))
+                {
+                    items.RemoveAt(i);
+                    continue;
+                }
+                item["name"] = newName;
+                item["source_uuid"] = uuidMap[oldName];
+                if (oldName == "FloodTuber Avatar") item["visible"] = avatarMode == AvatarMode.PngAvatar;
+                if (oldName == "VTube Studio Avatar") item["visible"] = avatarMode == AvatarMode.VTubeStudio;
             }
-            item["name"] = newName;
-            item["source_uuid"] = uuidMap[oldName];
-            if (oldName == "FloodTuber Avatar") item["visible"] = avatarMode == AvatarMode.PngAvatar;
-            if (oldName == "VTube Studio Avatar") item["visible"] = avatarMode == AvatarMode.VTubeStudio;
+
+            settings["id_counter"] = items.OfType<JsonObject>().Select(x => x["id"]?.GetValue<int>() ?? 0).DefaultIfEmpty().Max();
+            dst.Add(scene);
         }
-        dst.Add(verticalScene);
+
+        AddScene("Game Clean Vertical", "Vertical Live");
+        AddScene("Starting Soon", "Vertical Starting Soon");
+        AddScene("BRB", "Vertical BRB");
 
         var order = horizontal["scene_order"]?.AsArray();
         if (order is not null)
         {
             for (var i = order.Count - 1; i >= 0; i--)
-                if (string.Equals(order[i]?["name"]?.GetValue<string>(), "Vertical Live", StringComparison.Ordinal)) order.RemoveAt(i);
-            order.Add(new JsonObject { ["name"] = "Vertical Live" });
+            {
+                var name = order[i]?["name"]?.GetValue<string>();
+                if (name is not null && sceneNames.Contains(name, StringComparer.Ordinal)) order.RemoveAt(i);
+            }
+            foreach (var name in sceneNames) order.Add(new JsonObject { ["name"] = name });
         }
         File.WriteAllText(horizontalFile, horizontal.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
     }
