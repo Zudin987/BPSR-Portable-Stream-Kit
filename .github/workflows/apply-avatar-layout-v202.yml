@@ -1,15 +1,15 @@
 name: Apply v2.0.2 avatar layout fixes
 
 on:
-  push:
-    branches: ['hotfix/v2.0.2']
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.head_ref == 'hotfix/v2.0.2' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +24,7 @@ jobs:
         run: |
           rm scripts/apply_avatar_layout_v202.py
           rm .github/workflows/apply-avatar-layout-v202.yml
+          rm -f .trigger-avatar-layout-v202
 
       - name: Commit patched source
         run: |
