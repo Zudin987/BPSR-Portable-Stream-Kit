@@ -140,7 +140,7 @@ jobs:
           Copy-Item README.md publish/README.md -Force
           Copy-Item THIRD_PARTY_NOTICES.md publish/THIRD_PARTY_NOTICES.md -Force
           @"
-          BPSR Portable Stream Kit v0.3.0
+          BPSR Portable Stream Kit v0.3.1
 
           1. Extract the whole ZIP.
           2. Open BPSRStreamKit.exe.
@@ -216,9 +216,6 @@ jobs:
             zip="release-artifact/BPSR-Portable-Stream-Kit-win-x64.zip"
             test -f "$zip"
 
-            # A release branch is authoritative for that version. Recreate an
-            # existing stale release/tag so both the asset and tag target the
-            # commit that actually passed this build.
             if gh release view "$version" >/dev/null 2>&1; then
               gh release delete "$version" --cleanup-tag --yes
             fi
