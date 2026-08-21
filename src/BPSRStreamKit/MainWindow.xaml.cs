@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,21 +15,40 @@ namespace BPSRStreamKit;
 
 public partial class MainWindow : Window
 {
+    private sealed record ThemeChoice(StreamTheme Theme, string DisplayName, string Detail);
+
     private readonly DetectionService _detection = new();
     private readonly SetupService _setup = new();
     private readonly ObsService _obs = new();
     private readonly GameCatalogService _catalog = new();
     private readonly DispatcherTimer _statusTimer;
+    private readonly IReadOnlyList<ThemeChoice> _themes = new[]
+    {
+        new ThemeChoice(StreamTheme.ProfileA, "Profile A", "Sakura Catgirl · pink frame"),
+        new ThemeChoice(StreamTheme.ProfileB, "Profile B", "Chibi Doctor · medical frame")
+    };
 
     private StreamTarget _selectedTarget = StreamTarget.Discord;
+    private StreamTheme _selectedTheme = StreamTheme.ProfileA;
     private bool _busy;
     private bool _loadingGames;
+    private bool _loadingTheme;
 
     private GameTarget? SelectedGame => GameCombo.SelectedItem as GameTarget;
+    private ThemeChoice? SelectedThemeChoice => ThemeCombo.SelectedItem as ThemeChoice;
+    private static string ThemePreferenceFile => Path.Combine(AppPaths.Root, ".streamkit-theme");
 
     public MainWindow()
     {
         InitializeComponent();
+
+        _loadingTheme = true;
+        ThemeCombo.ItemsSource = _themes;
+        _selectedTheme = LoadSavedTheme();
+        ThemeCombo.SelectedItem = _themes.FirstOrDefault(x => x.Theme == _selectedTheme) ?? _themes[0];
+        _loadingTheme = false;
+        UpdateThemeCard();
+
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _statusTimer.Tick += async (_, _) =>
         {
@@ -94,7 +114,7 @@ public partial class MainWindow : Window
         SetStatus(ObsStatusDot, ObsStatusText, state.ObsReady,
             "Portable engine ready", "Stream engine needs setup");
         SetStatus(AvatarStatusDot, AvatarStatusText, state.AvatarReady,
-            "Avatar layer synced", "Avatar layer needs setup");
+            $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} avatar ready", "Avatar layer needs setup");
         SetStatus(AudioStatusDot, AudioStatusText, state.AudioIsolationReady,
             "Game + Mic isolated", "Audio sandbox needs setup");
 
@@ -103,7 +123,7 @@ public partial class MainWindow : Window
             HeroEyebrow.Text = "SETUP REQUIRED";
             HeroEyebrow.Foreground = (Brush)FindResource("WarnBrush");
             HeroTitle.Text = "One click from ready";
-            HeroSubtitle.Text = "StreamKit will prepare its portable stream engine, avatar layer and private capture layout automatically.";
+            HeroSubtitle.Text = "StreamKit will prepare its portable stream engine, selected avatar theme and private capture layout automatically.";
             MainActionButton.Content = "Set up & " + GetActionLabel();
             FooterStatus.Text = "First run setup stays inside this folder";
             return;
@@ -119,7 +139,7 @@ public partial class MainWindow : Window
             HeroSubtitle.Text = game?.IsBpsr == true
                 ? "The stream engine is ready. Open Blue Protocol: Star Resonance and StreamKit will hook it automatically."
                 : $"Open {gameName}, then press Scan games if its window changed.";
-            FooterStatus.Text = "Private capture ready · waiting for game";
+            FooterStatus.Text = $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · private capture ready · waiting for game";
             return;
         }
 
@@ -136,15 +156,15 @@ public partial class MainWindow : Window
         if (game?.IsBpsr == true)
         {
             HeroSubtitle.Text = state.ResonanceLogsRunning
-                ? "BPSR + Resonance Logs detected. Your full DPS/HUD layout is ready."
-                : "BPSR is detected. DPS and Dungeon HUD will appear when Resonance Logs is open.";
+                ? $"BPSR + Resonance Logs detected. {SelectedThemeChoice?.DisplayName ?? "Profile A"} is ready with your full DPS/HUD layout."
+                : $"BPSR is detected. {SelectedThemeChoice?.DisplayName ?? "Profile A"} is ready; DPS and Dungeon HUD will appear when Resonance Logs is open.";
         }
         else
         {
-            HeroSubtitle.Text = $"{gameName} will use the clean layout: game + frame + avatar. BPSR-only DPS/HUD sources stay hidden.";
+            HeroSubtitle.Text = $"{gameName} will use the clean {SelectedThemeChoice?.DisplayName ?? "Profile A"} layout: game + frame + avatar. BPSR-only DPS/HUD sources stay hidden.";
         }
 
-        FooterStatus.Text = "Ready · no desktop capture · no Discord echo";
+        FooterStatus.Text = $"Ready · {SelectedThemeChoice?.DisplayName ?? "Profile A"} · no desktop capture · no Discord echo";
     }
 
     private void SetStatus(Ellipse dot, TextBlock label, bool ready, string readyText, string missingText)
@@ -174,7 +194,6 @@ public partial class MainWindow : Window
                 SetupStatusText.Text = value.Message;
             });
 
-            // This fast readiness pass also upgrades older installs with the clean-game scenes.
             await _setup.EnsureReadyAsync(showProgress ? progress : null);
             SetupProgressPanel.Visibility = Visibility.Collapsed;
 
@@ -184,13 +203,13 @@ public partial class MainWindow : Window
 
             _catalog.Save(game);
             _catalog.SaveLastSelectedProcess(game.ProcessName);
-            _obs.Launch(_selectedTarget, game);
+            _obs.Launch(_selectedTarget, game, _selectedTheme);
 
             FooterStatus.Text = _selectedTarget switch
             {
-                StreamTarget.Discord => "OBS ready · share the OBS Projector window in Discord",
-                StreamTarget.Twitch => "Twitch layout opened · use OBS Start Streaming when your account is connected",
-                StreamTarget.TikTok => "TikTok vertical layout opened · use your local TikTok stream method in OBS",
+                StreamTarget.Discord => $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · OBS ready · share the OBS Projector window in Discord",
+                StreamTarget.Twitch => $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · Twitch layout opened · use OBS Start Streaming when your account is connected",
+                StreamTarget.TikTok => $"{SelectedThemeChoice?.DisplayName ?? "Profile A"} · TikTok vertical layout opened · use your local TikTok stream method in OBS",
                 _ => "OBS opened"
             };
         }
@@ -216,12 +235,13 @@ public partial class MainWindow : Window
         SetSegment(TikTokSegment, _selectedTarget == StreamTarget.TikTok);
         MainActionButton.Content = GetActionLabel();
 
+        var profile = SelectedThemeChoice?.DisplayName ?? "Profile A";
         ActionHint.Text = _selectedTarget switch
         {
-            StreamTarget.Discord => "Game + Mic only · share OBS Projector in Discord",
-            StreamTarget.Twitch => "1080p60 · Game + Mic only",
-            StreamTarget.TikTok => "Vertical layout · Game + Mic only",
-            _ => "Game + Mic only"
+            StreamTarget.Discord => $"Game + Mic only · {profile} · share OBS Projector in Discord",
+            StreamTarget.Twitch => $"1080p60 · Game + Mic only · {profile}",
+            StreamTarget.TikTok => $"Vertical layout · Game + Mic only · {profile}",
+            _ => $"Game + Mic only · {profile}"
         };
     }
 
@@ -248,6 +268,36 @@ public partial class MainWindow : Window
             : "Only the selected game + your mic are captured. BPSR DPS/HUD, desktop, browsers and Discord voices stay out.";
     }
 
+    private void UpdateThemeCard()
+    {
+        ThemeDetailText.Text = SelectedThemeChoice?.Detail ?? "Sakura Catgirl · pink frame";
+    }
+
+    private StreamTheme LoadSavedTheme()
+    {
+        try
+        {
+            if (!File.Exists(ThemePreferenceFile)) return StreamTheme.ProfileA;
+            var value = File.ReadAllText(ThemePreferenceFile).Trim();
+            return value.Equals("B", StringComparison.OrdinalIgnoreCase)
+                ? StreamTheme.ProfileB
+                : StreamTheme.ProfileA;
+        }
+        catch
+        {
+            return StreamTheme.ProfileA;
+        }
+    }
+
+    private void SaveThemePreference()
+    {
+        try
+        {
+            File.WriteAllText(ThemePreferenceFile, _selectedTheme == StreamTheme.ProfileB ? "B" : "A");
+        }
+        catch { }
+    }
+
     private void SetBusy(bool busy)
     {
         _busy = busy;
@@ -255,6 +305,7 @@ public partial class MainWindow : Window
         DiscordSegment.IsEnabled = !busy;
         TwitchSegment.IsEnabled = !busy;
         TikTokSegment.IsEnabled = !busy;
+        ThemeCombo.IsEnabled = !busy;
         GameCombo.IsEnabled = !busy;
         Cursor = busy ? System.Windows.Input.Cursors.Wait : System.Windows.Input.Cursors.Arrow;
     }
@@ -278,6 +329,18 @@ public partial class MainWindow : Window
     private async void TikTokSegment_Click(object sender, RoutedEventArgs e)
     {
         _selectedTarget = StreamTarget.TikTok;
+        ApplyPlatformSelection();
+        await RefreshStatusAsync();
+    }
+
+    private async void ThemeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingTheme) return;
+        if (SelectedThemeChoice is not { } choice) return;
+
+        _selectedTheme = choice.Theme;
+        SaveThemePreference();
+        UpdateThemeCard();
         ApplyPlatformSelection();
         await RefreshStatusAsync();
     }
@@ -348,7 +411,7 @@ public partial class MainWindow : Window
             await StartAsync();
             return;
         }
-        _obs.Launch(StreamTarget.PlainObs);
+        _obs.Launch(StreamTarget.PlainObs, null, _selectedTheme);
     }
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e)

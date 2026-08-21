@@ -41,20 +41,99 @@ jobs:
           Copy-Item -Path Assets -Destination publish/Assets -Recurse -Force
           Copy-Item -Path templates -Destination publish/templates -Recurse -Force
 
+      - name: Generate Profile B medical frames
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+
+          function New-MedicalFrame {
+            param(
+              [Parameter(Mandatory=$true)][string]$Path,
+              [Parameter(Mandatory=$true)][int]$Width,
+              [Parameter(Mandatory=$true)][int]$Height
+            )
+
+            $dir = Split-Path -Parent $Path
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+
+            $bmp = [System.Drawing.Bitmap]::new($Width, $Height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $g.Clear([System.Drawing.Color]::Transparent)
+
+            $short = [Math]::Min($Width, $Height)
+            $margin = [int][Math]::Round($short * 0.018)
+            $line1 = [single][Math]::Max(4, [Math]::Round($short / 220))
+            $line2 = [single][Math]::Max(2, [Math]::Round($short / 430))
+            $cyan = [System.Drawing.Color]::FromArgb(235, 0, 195, 225)
+            $white = [System.Drawing.Color]::FromArgb(225, 238, 252, 255)
+            $soft = [System.Drawing.Color]::FromArgb(150, 92, 221, 235)
+            $p1 = [System.Drawing.Pen]::new($cyan, $line1)
+            $p2 = [System.Drawing.Pen]::new($white, $line2)
+            $p3 = [System.Drawing.Pen]::new($soft, $line2)
+
+            $g.DrawRectangle($p1, $margin, $margin, $Width - (2 * $margin) - 1, $Height - (2 * $margin) - 1)
+            $g.DrawRectangle($p2, $margin + 7, $margin + 7, $Width - (2 * ($margin + 7)) - 1, $Height - (2 * ($margin + 7)) - 1)
+
+            $corner = [int][Math]::Round($short * 0.07)
+            $m = $margin
+            # Minimal corner accents.
+            $g.DrawLine($p3, $m, $m + $corner, $m + $corner, $m)
+            $g.DrawLine($p3, $Width - $m, $m + $corner, $Width - $m - $corner, $m)
+            $g.DrawLine($p3, $m, $Height - $m - $corner, $m + $corner, $Height - $m)
+            $g.DrawLine($p3, $Width - $m, $Height - $m - $corner, $Width - $m - $corner, $Height - $m)
+
+            # Small medical '+' at top-left and ECG pulse at top-center.
+            $plusX = $m + [int]($corner * 0.55)
+            $plusY = $m + [int]($corner * 0.55)
+            $plusR = [int][Math]::Max(8, $short * 0.012)
+            $g.DrawLine($p2, $plusX - $plusR, $plusY, $plusX + $plusR, $plusY)
+            $g.DrawLine($p2, $plusX, $plusY - $plusR, $plusX, $plusY + $plusR)
+
+            $cx = [int]($Width / 2)
+            $ey = $m + 3
+            $step = [int][Math]::Max(10, $short * 0.012)
+            $pts = [System.Drawing.Point[]]@(
+              [System.Drawing.Point]::new($cx - 4*$step, $ey),
+              [System.Drawing.Point]::new($cx - 2*$step, $ey),
+              [System.Drawing.Point]::new($cx - $step, $ey - $step),
+              [System.Drawing.Point]::new($cx, $ey + $step),
+              [System.Drawing.Point]::new($cx + $step, $ey - 2*$step),
+              [System.Drawing.Point]::new($cx + 2*$step, $ey),
+              [System.Drawing.Point]::new($cx + 4*$step, $ey)
+            )
+            $g.DrawLines($p1, $pts)
+
+            $bmp.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+            $p1.Dispose(); $p2.Dispose(); $p3.Dispose(); $g.Dispose(); $bmp.Dispose()
+          }
+
+          $frames = 'publish/Assets/Themes/Profile_B_Doctor/Frames'
+          New-MedicalFrame -Path (Join-Path $frames 'Discord_1080p.png') -Width 1920 -Height 1080
+          New-MedicalFrame -Path (Join-Path $frames 'TikTok_1080x1920.png') -Width 1080 -Height 1920
+
+      - name: Verify required release files
+        shell: pwsh
+        run: |
           $required = @(
             'publish/Assets/Frames/01_Minimal_Thin_1080p.png',
+            'publish/Assets/Frames/05_TikTok_Minimal_1080x1920.png',
             'publish/Assets/Screens/Starting_1080p.png',
             'publish/Assets/Screens/BRB_1080p.png',
             'publish/Assets/MyAvatar/idle.png',
             'publish/Assets/MyAvatar/talk_a.png',
             'publish/Assets/MyAvatar/talk_b.png',
-            'publish/templates/basic/scenes/BPSR_Horizontal.json'
+            'publish/Assets/Themes/Profile_B_Doctor/Avatar/idle.png',
+            'publish/Assets/Themes/Profile_B_Doctor/Avatar/talk_a.png',
+            'publish/Assets/Themes/Profile_B_Doctor/Avatar/blink.png',
+            'publish/Assets/Themes/Profile_B_Doctor/Avatar/action.png',
+            'publish/Assets/Themes/Profile_B_Doctor/Frames/Discord_1080p.png',
+            'publish/Assets/Themes/Profile_B_Doctor/Frames/TikTok_1080x1920.png',
+            'publish/templates/basic/scenes/BPSR_Horizontal.json',
+            'publish/templates/basic/scenes/BPSR_TikTok_Vertical.json'
           )
-
           foreach ($file in $required) {
-            if (-not (Test-Path $file)) {
-              throw "Required release file is missing: $file"
-            }
+            if (-not (Test-Path $file)) { throw "Required release file is missing: $file" }
           }
 
       - name: Add release notes and third-party notices
@@ -63,11 +142,12 @@ jobs:
           Copy-Item README.md publish/README.md -Force
           Copy-Item THIRD_PARTY_NOTICES.md publish/THIRD_PARTY_NOTICES.md -Force
           @"
-          BPSR Portable Stream Kit
+          BPSR Portable Stream Kit v0.3.0
 
           1. Extract the whole ZIP.
           2. Open BPSRStreamKit.exe.
-          3. Click Start Discord (recommended) or choose Twitch/TikTok.
+          3. Pick Profile A (Sakura Catgirl) or Profile B (Chibi Doctor).
+          4. Pick Discord, Twitch or TikTok and press Start.
 
           The first launch downloads the pinned portable OBS/FloodTuber builds.
           No normal OBS installation is required.
@@ -84,24 +164,24 @@ jobs:
           $checkDir = Join-Path $env:RUNNER_TEMP 'bpsr-package-check'
           if (Test-Path $checkDir) { Remove-Item $checkDir -Recurse -Force }
           Expand-Archive BPSR-Portable-Stream-Kit-win-x64.zip -DestinationPath $checkDir -Force
-
           $required = @(
             'Assets/Frames/01_Minimal_Thin_1080p.png',
-            'Assets/Screens/Starting_1080p.png',
-            'Assets/Screens/BRB_1080p.png',
+            'Assets/Frames/05_TikTok_Minimal_1080x1920.png',
             'Assets/MyAvatar/idle.png',
-            'Assets/MyAvatar/talk_a.png',
-            'Assets/MyAvatar/talk_b.png',
+            'Assets/Themes/Profile_B_Doctor/Avatar/idle.png',
+            'Assets/Themes/Profile_B_Doctor/Avatar/talk_a.png',
+            'Assets/Themes/Profile_B_Doctor/Avatar/blink.png',
+            'Assets/Themes/Profile_B_Doctor/Avatar/action.png',
+            'Assets/Themes/Profile_B_Doctor/Frames/Discord_1080p.png',
+            'Assets/Themes/Profile_B_Doctor/Frames/TikTok_1080x1920.png',
             'templates/basic/scenes/BPSR_Horizontal.json',
+            'templates/basic/scenes/BPSR_TikTok_Vertical.json',
             'THIRD_PARTY_NOTICES.md',
             'BPSRStreamKit.exe'
           )
-
           foreach ($relative in $required) {
             $file = Join-Path $checkDir $relative
-            if (-not (Test-Path $file)) {
-              throw "Packaged ZIP verification failed. Missing: $relative"
-            }
+            if (-not (Test-Path $file)) { throw "Packaged ZIP verification failed. Missing: $relative" }
           }
 
       - name: Upload build artifact
@@ -138,10 +218,8 @@ jobs:
           else
             version="$GITHUB_REF_NAME"
           fi
-
           zip="release-artifact/BPSR-Portable-Stream-Kit-win-x64.zip"
           test -f "$zip"
-
           if gh release view "$version" >/dev/null 2>&1; then
             gh release upload "$version" "$zip" --clobber
           else

@@ -15,12 +15,20 @@ public enum StreamTarget
     PlainObs
 }
 
+public enum StreamTheme
+{
+    ProfileA,
+    ProfileB
+}
+
 public sealed class ObsService
 {
-    public void Launch(StreamTarget target, GameTarget? game = null)
+    public void Launch(StreamTarget target, GameTarget? game = null, StreamTheme theme = StreamTheme.ProfileA)
     {
         var obsExe = AppPaths.FindObsExe() ?? throw new FileNotFoundException("Portable OBS is not ready yet.");
         var workingDirectory = Path.GetDirectoryName(obsExe)!;
+
+        ApplyTheme(theme);
 
         var startInfo = new ProcessStartInfo
         {
@@ -76,6 +84,113 @@ public sealed class ObsService
         }
 
         Process.Start(startInfo);
+    }
+
+    private static void ApplyTheme(StreamTheme theme)
+    {
+        var configRoot = AppPaths.ObsConfigRoot() ?? throw new InvalidOperationException("Portable OBS config path could not be resolved.");
+        var sceneRoot = Path.Combine(configRoot, "basic", "scenes");
+
+        string avatarDirectory;
+        string horizontalFrame;
+        string verticalFrame;
+        var showDpsPanel = theme == StreamTheme.ProfileA;
+
+        if (theme == StreamTheme.ProfileB)
+        {
+            var themeRoot = Path.Combine(AppPaths.AssetsDirectory, "Themes", "Profile_B_Doctor");
+            avatarDirectory = Path.Combine(themeRoot, "Avatar");
+            horizontalFrame = Path.Combine(themeRoot, "Frames", "Discord_1080p.png");
+            verticalFrame = Path.Combine(themeRoot, "Frames", "TikTok_1080x1920.png");
+        }
+        else
+        {
+            avatarDirectory = Path.Combine(AppPaths.AssetsDirectory, "MyAvatar");
+            horizontalFrame = Path.Combine(AppPaths.AssetsDirectory, "Frames", "01_Minimal_Thin_1080p.png");
+            verticalFrame = Path.Combine(AppPaths.AssetsDirectory, "Frames", "05_TikTok_Minimal_1080x1920.png");
+        }
+
+        var required = new[]
+        {
+            Path.Combine(avatarDirectory, "idle.png"),
+            Path.Combine(avatarDirectory, "blink.png"),
+            Path.Combine(avatarDirectory, "action.png"),
+            Path.Combine(avatarDirectory, "talk_a.png"),
+            horizontalFrame,
+            verticalFrame
+        };
+
+        var missing = required.FirstOrDefault(path => !File.Exists(path));
+        if (missing is not null)
+            throw new FileNotFoundException("The selected theme is incomplete. Download the latest complete StreamKit release ZIP or use Advanced → Repair.", missing);
+
+        ApplyThemeToCollection(
+            Path.Combine(sceneRoot, "BPSR_Horizontal.json"),
+            "Minimal Stream Frame",
+            avatarDirectory,
+            horizontalFrame,
+            showDpsPanel);
+
+        ApplyThemeToCollection(
+            Path.Combine(sceneRoot, "BPSR_TikTok_Vertical.json"),
+            "TikTok Minimal Frame",
+            avatarDirectory,
+            verticalFrame,
+            showDpsPanel);
+    }
+
+    private static void ApplyThemeToCollection(
+        string file,
+        string frameSourceName,
+        string avatarDirectory,
+        string frameFile,
+        bool showDpsPanel)
+    {
+        if (!File.Exists(file))
+            throw new FileNotFoundException("The OBS scene collection is missing. Use Advanced → Repair once.", file);
+
+        var root = JsonNode.Parse(File.ReadAllText(file))?.AsObject()
+                   ?? throw new InvalidDataException("OBS scene collection could not be read.");
+        var sources = root["sources"]?.AsArray()
+                      ?? throw new InvalidDataException("OBS scene collection has no sources array.");
+
+        var avatar = FindSource(sources, "FloodTuber Avatar")
+                     ?? throw new InvalidOperationException("The FloodTuber avatar source is missing. Use Advanced → Repair once.");
+        var avatarSettings = avatar["settings"]?.AsObject() ?? new JsonObject();
+        avatar["settings"] = avatarSettings;
+
+        static string ObsPath(string path) => path.Replace('\\', '/');
+
+        avatarSettings["path_idle"] = ObsPath(Path.Combine(avatarDirectory, "idle.png"));
+        avatarSettings["path_blink"] = ObsPath(Path.Combine(avatarDirectory, "blink.png"));
+        avatarSettings["path_action"] = ObsPath(Path.Combine(avatarDirectory, "action.png"));
+        avatarSettings["path_talk_1"] = ObsPath(Path.Combine(avatarDirectory, "talk_a.png"));
+        avatarSettings["path_talk_2"] = ObsPath(Path.Combine(avatarDirectory, "talk_a.png"));
+        avatarSettings["path_talk_3"] = ObsPath(Path.Combine(avatarDirectory, "talk_a.png"));
+        avatarSettings["custom_avatars_path"] = ObsPath(avatarDirectory);
+
+        var frame = FindSource(sources, frameSourceName)
+                    ?? throw new InvalidOperationException($"The stream frame source '{frameSourceName}' is missing. Use Advanced → Repair once.");
+        var frameSettings = frame["settings"]?.AsObject() ?? new JsonObject();
+        frame["settings"] = frameSettings;
+        frameSettings["file"] = ObsPath(frameFile);
+
+        foreach (var scene in sources.OfType<JsonObject>().Where(x => string.Equals(x["id"]?.GetValue<string>(), "scene", StringComparison.Ordinal)))
+        {
+            var items = scene["settings"]?["items"]?.AsArray();
+            if (items is null) continue;
+
+            foreach (var item in items.OfType<JsonObject>().Where(x => string.Equals(x["name"]?.GetValue<string>(), "DPS Panel", StringComparison.Ordinal)))
+                item["visible"] = showDpsPanel;
+        }
+
+        File.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+    }
+
+    private static JsonObject? FindSource(JsonArray sources, string name)
+    {
+        return sources.OfType<JsonObject>()
+            .FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), name, StringComparison.Ordinal));
     }
 
     private static void PrepareGenericCapture(GameTarget game, bool vertical)

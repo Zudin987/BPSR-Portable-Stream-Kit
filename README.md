@@ -2,21 +2,40 @@
 
 A portable Windows streaming launcher that prepares a private OBS setup for **BPSR and other supported games** without requiring a normal system-wide OBS installation.
 
-> **TL;DR:** Extract the release ZIP, run `BPSRStreamKit.exe`, choose your destination + game, then press the main Start button. On first use, Stream Kit downloads its pinned portable OBS/FloodTuber components and prepares the private scene for you.
+> **TL;DR:** Extract the release ZIP, run `BPSRStreamKit.exe`, choose your destination + game + visual profile, then press the main Start button. On first use, Stream Kit downloads its pinned portable OBS/FloodTuber components and prepares the private scene for you.
 
 ## What this app does
 
 - Provides one launcher for **Discord**, **Twitch**, and **TikTok** streaming setups.
 - Detects supported games and prepares the matching OBS scene/layout.
+- Lets the user switch between complete visual profiles without manually editing OBS.
 - Keeps the capture focused on the selected game + microphone instead of a general desktop capture.
 - Includes the tested BPSR stream frames, starting/BRB screens, templates, and avatar images in the release ZIP.
 - Uses portable OBS configuration rather than modifying a normal installed OBS profile.
 - Downloads the pinned OBS/FloodTuber runtime components on first setup instead of committing those binaries to this repository.
 
+## Included visual profiles
+
+### Profile A — Sakura Catgirl
+
+- Pink/sakura FloodTuber avatar set
+- Thin pink Discord/Twitch frame
+- Matching vertical TikTok frame
+- Existing themed DPS backing panel
+
+### Profile B — Chibi Doctor
+
+- Chibi doctor FloodTuber avatar set
+- Thin cyan/white medical Discord/Twitch frame
+- Matching vertical TikTok medical frame
+- Cleaner DPS presentation without the pink backing panel
+
+The selected profile is remembered locally and is applied to the OBS scene automatically when Stream Kit launches it.
+
 ## Quick Start — 1, 2, 3
 
-1. Download the release ZIP and **extract the whole folder**.
-2. Run `BPSRStreamKit.exe`, allow the Administrator prompt, then choose **Discord / Twitch / TikTok** and your game.
+1. Download the latest release ZIP and **extract the whole folder**.
+2. Run `BPSRStreamKit.exe`, allow the Administrator prompt, then choose **Discord / Twitch / TikTok**, your game, and **Profile A / Profile B**.
 3. Press the main **Start** action. Complete any streaming-service login/key setup inside the local portable OBS environment when required.
 
 Do not move only the EXE out of the extracted folder; the packaged assets/templates are part of the release.
@@ -63,7 +82,8 @@ The release intentionally contains the tested files under:
 ```text
 Assets/Frames/
 Assets/Screens/
-Assets/MyAvatar/
+Assets/MyAvatar/                       # Profile A
+Assets/Themes/Profile_B_Doctor/       # Profile B
 ```
 
 See [Assets/README.md](Assets/README.md) for the expected layout.
