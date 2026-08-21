@@ -14,7 +14,21 @@ public sealed class VTubeStudioService
 {
     public const int SteamAppId = 1325860;
 
-    public bool IsRunning() => TryGetProcess() is not null;
+    public bool IsRunning()
+    {
+        try
+        {
+            foreach (var process in Process.GetProcesses())
+            {
+                using (process)
+                {
+                    if (LooksLikeVTubeStudio(process)) return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
 
     public void Launch()
     {
@@ -25,7 +39,7 @@ public sealed class VTubeStudioService
     public async Task<VTubeCaptureTarget> LaunchAndWaitAsync(TimeSpan? timeout = null)
     {
         Launch();
-        var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(25));
+        var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(35));
         while (DateTime.UtcNow < until)
         {
             var target = TryGetCaptureTarget();
@@ -44,17 +58,17 @@ public sealed class VTubeStudioService
             try
             {
                 if (!IsWindowVisible(hwnd)) return true;
-                _ = GetWindowThreadProcessId(hwnd, out var pid);
+                GetWindowThreadProcessId(hwnd, out var pid);
                 using var process = Process.GetProcessById((int)pid);
                 if (!LooksLikeVTubeStudio(process)) return true;
 
                 var titleLength = GetWindowTextLength(hwnd);
                 if (titleLength < 1) return true;
                 var title = new StringBuilder(titleLength + 1);
-                _ = GetWindowText(hwnd, title, title.Capacity);
+                GetWindowText(hwnd, title, title.Capacity);
 
                 var windowClass = new StringBuilder(256);
-                _ = GetClassName(hwnd, windowClass, windowClass.Capacity);
+                GetClassName(hwnd, windowClass, windowClass.Capacity);
 
                 var exe = "VTube Studio.exe";
                 try { exe = Path.GetFileName(process.MainModule?.FileName) ?? exe; } catch { }
@@ -64,15 +78,6 @@ public sealed class VTubeStudioService
             catch { return true; }
         }, IntPtr.Zero);
         return found;
-    }
-
-    private static Process? TryGetProcess()
-    {
-        try
-        {
-            return Process.GetProcesses().FirstOrDefault(LooksLikeVTubeStudio);
-        }
-        catch { return null; }
     }
 
     private static bool LooksLikeVTubeStudio(Process process)
