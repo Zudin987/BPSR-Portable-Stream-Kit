@@ -9,9 +9,7 @@ public sealed record GameTarget(
     bool IsBpsr = false,
     bool IsRunning = true)
 {
-    public string LayoutLabel => IsBpsr
-        ? "Full layout · DPS + Dungeon HUD"
-        : "Clean layout · Game + Avatar + Frame";
+    public string LayoutLabel => "Clean layout · Game + Avatar + Frame";
 
     public string ObsWindowString => $"{Escape(WindowTitle)}:{WindowClass}:{ExecutableName}";
 
