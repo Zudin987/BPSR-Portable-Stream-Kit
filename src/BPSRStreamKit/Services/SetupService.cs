@@ -13,9 +13,11 @@ public sealed class SetupService
 {
     private const string ObsVersion = "32.2.1";
     private const string FloodTuberVersion = "1.1.0";
+    public const string AitumVersion = "1.2.1";
 
     private const string ObsUrl = "https://github.com/obsproject/obs-studio/releases/download/32.2.1/OBS-Studio-32.2.1-Windows-x64.zip";
     private const string FloodTuberUrl = "https://github.com/justflood/flood-tuber/releases/download/v1.1.0/FloodTuber-Portable-v1.1.0.zip";
+    private const string AitumUrl = "https://github.com/Aitum/obs-aitum-stream-suite/releases/download/1.2.1/aitum-stream-suite-windows.zip";
     private const string ObsSha256 = "db64a2934f8261f85b1410b84be011207a0afda5400d008289f1f1e211bcc7de";
 
     private readonly HttpClient _http = new(new HttpClientHandler
@@ -26,7 +28,7 @@ public sealed class SetupService
         Timeout = TimeSpan.FromMinutes(15)
     };
 
-    public async Task EnsureReadyAsync(IProgress<(int Percent, string Message)>? progress = null, bool repair = false)
+    public async Task EnsureReadyAsync(IProgress<(int Percent, string Message)>? progress = null, bool repair = false, bool needAitum = false)
     {
         Directory.CreateDirectory(AppPaths.CacheDirectory);
 
@@ -41,38 +43,123 @@ public sealed class SetupService
         var obsRoot = AppPaths.FindObsRoot() ?? throw new InvalidOperationException("OBS was downloaded but obs64.exe could not be found.");
         File.WriteAllText(Path.Combine(obsRoot, "portable_mode.txt"), string.Empty);
 
-        progress?.Report((55, "Syncing avatar layer…"));
+        progress?.Report((52, "Syncing PNG avatar fallback…"));
         await EnsureFloodTuberAsync(obsRoot, progress);
 
-        progress?.Report((76, "Preparing stream layouts…"));
+        if (needAitum)
+        {
+            progress?.Report((64, $"Checking Aitum Stream Suite {AitumVersion}…"));
+            await EnsureAitumAsync(obsRoot, progress);
+        }
+
+        progress?.Report((78, "Preparing stream layouts…"));
         InstallConfigTemplates(repair);
 
-        progress?.Report((95, "Running final safety check…"));
-        ValidateCoreFiles();
+        var password = ObsAutomationService.GetOrCreatePassword();
+        ObsAutomationService.EnsureServerConfig(password);
+        if (needAitum) EnsureAitumProfileConfig();
 
+        progress?.Report((95, "Running final safety check…"));
+        ValidateCoreFiles(needAitum);
         progress?.Report((100, "Ready."));
+    }
+
+    public bool IsAitumReady()
+    {
+        var root = AppPaths.FindObsRoot();
+        return root is not null && FindAitumPlugin(root) is not null;
+    }
+
+    public string? GetVerticalCanvasUuid()
+    {
+        try
+        {
+            var root = LoadAitumConfig();
+            var canvas = root?["canvas"]?.AsArray()?.OfType<JsonObject>()
+                .FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), "Vertical", StringComparison.OrdinalIgnoreCase));
+            var uuid = canvas?["uuid"]?.GetValue<string>();
+            return string.IsNullOrWhiteSpace(uuid) ? null : uuid;
+        }
+        catch { return null; }
+    }
+
+    public bool HasAitumStreamOutput()
+    {
+        try
+        {
+            var outputs = LoadAitumConfig()?["outputs"]?.AsArray();
+            if (outputs is null) return false;
+            return outputs.OfType<JsonObject>().Any(x =>
+            {
+                var type = x["type"]?.GetValue<string>() ?? "stream";
+                var server = x["stream_server"]?.GetValue<string>() ?? x["server"]?.GetValue<string>() ?? string.Empty;
+                return (string.IsNullOrWhiteSpace(type) || type.Equals("stream", StringComparison.OrdinalIgnoreCase))
+                       && !string.IsNullOrWhiteSpace(server);
+            });
+        }
+        catch { return false; }
+    }
+
+    public void EnsureAitumProfileConfig()
+    {
+        var path = AitumConfigPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        JsonObject root;
+        try { root = File.Exists(path) ? JsonNode.Parse(File.ReadAllText(path))?.AsObject() ?? new JsonObject() : new JsonObject(); }
+        catch { root = new JsonObject(); }
+
+        root["main_stream_output_show"] = true;
+        root["main_virtual_cam_output_show"] = true;
+
+        var canvases = root["canvas"]?.AsArray();
+        if (canvases is null)
+        {
+            canvases = new JsonArray();
+            root["canvas"] = canvases;
+        }
+
+        var vertical = canvases.OfType<JsonObject>()
+            .FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), "Vertical", StringComparison.OrdinalIgnoreCase));
+        if (vertical is null)
+        {
+            vertical = new JsonObject
+            {
+                ["name"] = "Vertical",
+                ["type"] = "extra",
+                ["width"] = 1080,
+                ["height"] = 1920,
+                ["color"] = 2038295,
+                ["expanded"] = true
+            };
+            canvases.Add(vertical);
+        }
+        else
+        {
+            vertical["name"] = "Vertical";
+            vertical["type"] = "extra";
+            vertical["width"] = 1080;
+            vertical["height"] = 1920;
+        }
+
+        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
     private async Task InstallObsAsync(IProgress<(int Percent, string Message)>? progress)
     {
         var zipPath = Path.Combine(AppPaths.CacheDirectory, $"OBS-Studio-{ObsVersion}-Windows-x64.zip");
-
         if (!File.Exists(zipPath) || !await VerifySha256Async(zipPath, ObsSha256))
         {
             if (File.Exists(zipPath)) File.Delete(zipPath);
             await DownloadFileAsync(ObsUrl, zipPath, 8, 47, progress, "Downloading portable stream engine");
         }
-
         if (!await VerifySha256Async(zipPath, ObsSha256))
             throw new InvalidDataException("OBS download failed its SHA-256 verification. Nothing was installed.");
 
         progress?.Report((49, "Unpacking stream engine…"));
         if (Directory.Exists(AppPaths.ObsDirectory))
         {
-            try { Directory.Delete(AppPaths.ObsDirectory, true); }
-            catch { }
+            try { Directory.Delete(AppPaths.ObsDirectory, true); } catch { }
         }
-
         Directory.CreateDirectory(AppPaths.ObsDirectory);
         ZipFile.ExtractToDirectory(zipPath, AppPaths.ObsDirectory, overwriteFiles: true);
     }
@@ -84,7 +171,7 @@ public sealed class SetupService
 
         var zipPath = Path.Combine(AppPaths.CacheDirectory, $"FloodTuber-Portable-v{FloodTuberVersion}.zip");
         if (!File.Exists(zipPath))
-            await DownloadFileAsync(FloodTuberUrl, zipPath, 56, 66, progress, "Downloading avatar support");
+            await DownloadFileAsync(FloodTuberUrl, zipPath, 53, 60, progress, "Downloading PNG avatar fallback");
 
         var tempDir = Path.Combine(AppPaths.CacheDirectory, "floodtuber-temp");
         if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
@@ -92,22 +179,54 @@ public sealed class SetupService
         ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
 
         var sourceDll = Directory.EnumerateFiles(tempDir, "flood-tuber.dll", SearchOption.AllDirectories).FirstOrDefault();
-        if (sourceDll is null)
-            throw new InvalidDataException("FloodTuber archive did not contain flood-tuber.dll.");
-
+        if (sourceDll is null) throw new InvalidDataException("FloodTuber archive did not contain flood-tuber.dll.");
         Directory.CreateDirectory(Path.GetDirectoryName(pluginDll)!);
         File.Copy(sourceDll, pluginDll, overwrite: true);
 
         var dataDirectory = Directory.EnumerateDirectories(tempDir, "flood-tuber", SearchOption.AllDirectories)
             .FirstOrDefault(path => path.Replace('\\', '/').Contains("/data/obs-plugins/flood-tuber", StringComparison.OrdinalIgnoreCase));
-
         if (dataDirectory is not null)
+            CopyDirectory(dataDirectory, Path.Combine(obsRoot, "data", "obs-plugins", "flood-tuber"), overwrite: true);
+        try { Directory.Delete(tempDir, true); } catch { }
+    }
+
+    private async Task EnsureAitumAsync(string obsRoot, IProgress<(int Percent, string Message)>? progress)
+    {
+        if (FindAitumPlugin(obsRoot) is not null) return;
+
+        var zipPath = Path.Combine(AppPaths.CacheDirectory, $"aitum-stream-suite-{AitumVersion}-windows.zip");
+        if (!File.Exists(zipPath))
+            await DownloadFileAsync(AitumUrl, zipPath, 64, 73, progress, "Downloading Aitum multistream support");
+
+        var tempDir = Path.Combine(AppPaths.CacheDirectory, "aitum-temp");
+        if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        Directory.CreateDirectory(tempDir);
+        try
         {
-            var destination = Path.Combine(obsRoot, "data", "obs-plugins", "flood-tuber");
-            CopyDirectory(dataDirectory, destination, overwrite: true);
+            ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
+        }
+        catch
+        {
+            try { File.Delete(zipPath); } catch { }
+            throw new InvalidDataException("The Aitum download was not a valid ZIP. Run Repair to retry the official pinned download.");
         }
 
+        var copied = 0;
+        foreach (var file in Directory.EnumerateFiles(tempDir, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(tempDir, file);
+            var parts = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var index = Array.FindIndex(parts, p => p.Equals("obs-plugins", StringComparison.OrdinalIgnoreCase) || p.Equals("data", StringComparison.OrdinalIgnoreCase));
+            if (index < 0) continue;
+            var destination = Path.Combine(new[] { obsRoot }.Concat(parts.Skip(index)).ToArray());
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(file, destination, overwrite: true);
+            copied++;
+        }
         try { Directory.Delete(tempDir, true); } catch { }
+
+        if (copied == 0 || FindAitumPlugin(obsRoot) is null)
+            throw new InvalidDataException("Aitum Stream Suite archive did not contain the expected portable OBS plugin files.");
     }
 
     private void InstallConfigTemplates(bool repair)
@@ -117,7 +236,6 @@ public sealed class SetupService
 
         var configRoot = AppPaths.ObsConfigRoot() ?? throw new InvalidOperationException("Portable OBS config path could not be resolved.");
         Directory.CreateDirectory(configRoot);
-
         var encoder = DetectSimpleEncoder();
         var portableRoot = AppPaths.Root.Replace('\\', '/');
 
@@ -126,28 +244,19 @@ public sealed class SetupService
             var relative = Path.GetRelativePath(AppPaths.TemplatesDirectory, template);
             var destination = Path.Combine(configRoot, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-
-            if (File.Exists(destination))
-                continue;
-
+            if (File.Exists(destination)) continue;
             var text = File.ReadAllText(template)
                 .Replace("__PACKROOT__", portableRoot, StringComparison.Ordinal)
                 .Replace("__ENCODER__", encoder, StringComparison.Ordinal);
-
             File.WriteAllText(destination, text);
         }
 
         EnsureCleanGameScenes(configRoot);
-
         var userIni = Path.Combine(configRoot, "user.ini");
         if (!File.Exists(userIni))
         {
             File.WriteAllText(userIni,
-                "[Basic]\n" +
-                "Profile=Discord Share\n" +
-                "ProfileDir=Discord Share\n" +
-                "SceneCollection=BPSR Horizontal\n" +
-                "SceneCollectionFile=BPSR_Horizontal\n");
+                "[Basic]\nProfile=Discord Share\nProfileDir=Discord Share\nSceneCollection=BPSR Horizontal\nSceneCollectionFile=BPSR_Horizontal\n");
         }
     }
 
@@ -161,7 +270,6 @@ public sealed class SetupService
     private static void EnsureCleanGameScene(string file, string baseSceneName, string cleanSceneName, string frameSourceName)
     {
         if (!File.Exists(file)) return;
-
         var root = JsonNode.Parse(File.ReadAllText(file))?.AsObject();
         var sources = root?["sources"]?.AsArray();
         if (root is null || sources is null) return;
@@ -169,10 +277,9 @@ public sealed class SetupService
         var selectedSource = FindSource(sources, "Selected Game + Audio");
         if (selectedSource is null)
         {
-            var bpsrSource = FindSource(sources, "BPSR Game + Audio");
-            if (bpsrSource is null) return;
-
-            selectedSource = bpsrSource.DeepClone().AsObject();
+            var original = FindSource(sources, "BPSR Game + Audio");
+            if (original is null) return;
+            selectedSource = original.DeepClone().AsObject();
             selectedSource["name"] = "Selected Game + Audio";
             selectedSource["uuid"] = Guid.NewGuid().ToString();
             var settings = selectedSource["settings"]?.AsObject() ?? new JsonObject();
@@ -180,91 +287,110 @@ public sealed class SetupService
             settings["window"] = "Waiting for selected game:WindowClass:game.exe";
             settings["capture_mode"] = "window";
             settings["capture_audio"] = true;
-            sources.Insert(Math.Max(0, sources.IndexOf(bpsrSource) + 1), selectedSource);
+            settings["capture_cursor"] = false;
+            sources.Insert(Math.Max(0, sources.IndexOf(original) + 1), selectedSource);
         }
 
-        if (FindSource(sources, cleanSceneName) is not null)
+        var vTube = FindSource(sources, "VTube Studio Avatar");
+        if (vTube is null)
         {
-            File.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
-            return;
+            vTube = selectedSource.DeepClone().AsObject();
+            vTube["name"] = "VTube Studio Avatar";
+            vTube["uuid"] = Guid.NewGuid().ToString();
+            vTube["mixers"] = 0;
+            var settings = vTube["settings"]?.AsObject() ?? new JsonObject();
+            vTube["settings"] = settings;
+            settings["window"] = "VTube Studio:UnityWndClass:VTube Studio.exe";
+            settings["capture_mode"] = "window";
+            settings["capture_audio"] = false;
+            settings["capture_cursor"] = false;
+            settings["allow_transparency"] = true;
+            settings["anti_cheat_hook"] = false;
+            sources.Insert(Math.Max(0, sources.IndexOf(selectedSource) + 1), vTube);
         }
 
         var baseScene = FindSource(sources, baseSceneName);
         if (baseScene is null) return;
-
-        var cleanScene = baseScene.DeepClone().AsObject();
-        cleanScene["name"] = cleanSceneName;
-        cleanScene["uuid"] = Guid.NewGuid().ToString();
-        cleanScene["hotkeys"] = new JsonObject { ["OBSBasic.SelectScene"] = new JsonArray() };
-
-        var cleanSettings = cleanScene["settings"]?.AsObject() ?? new JsonObject();
-        cleanScene["settings"] = cleanSettings;
-        cleanSettings["id_counter"] = 3;
-
-        var baseItems = baseScene["settings"]?["items"]?.AsArray();
-        if (baseItems is null) return;
-
-        JsonObject? CloneItem(string sourceName)
+        var cleanScene = FindSource(sources, cleanSceneName);
+        if (cleanScene is null)
         {
-            return baseItems.OfType<JsonObject>()
-                .FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), sourceName, StringComparison.Ordinal))
-                ?.DeepClone().AsObject();
+            cleanScene = baseScene.DeepClone().AsObject();
+            cleanScene["name"] = cleanSceneName;
+            cleanScene["uuid"] = Guid.NewGuid().ToString();
+            cleanScene["hotkeys"] = new JsonObject { ["OBSBasic.SelectScene"] = new JsonArray() };
+            sources.Add(cleanScene);
+            var sceneOrder = root["scene_order"]?.AsArray();
+            if (sceneOrder is not null) sceneOrder.Add(new JsonObject { ["name"] = cleanSceneName });
         }
 
-        var gameItem = CloneItem("BPSR Game + Audio");
-        var frameItem = CloneItem(frameSourceName);
-        var avatarItem = CloneItem("FloodTuber Avatar");
-        if (gameItem is null || frameItem is null || avatarItem is null) return;
+        var settingsObj = cleanScene["settings"]?.AsObject() ?? new JsonObject();
+        cleanScene["settings"] = settingsObj;
+        var items = settingsObj["items"]?.AsArray() ?? new JsonArray();
+        settingsObj["items"] = items;
 
-        gameItem["name"] = "Selected Game + Audio";
-        gameItem["source_uuid"] = selectedSource["uuid"]?.GetValue<string>();
-        gameItem["id"] = 1;
-        frameItem["id"] = 2;
-        avatarItem["id"] = 3;
+        JsonObject? FindItem(string name) => items.OfType<JsonObject>().FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), name, StringComparison.Ordinal));
+        JsonObject? CloneBaseItem(string name) => baseScene["settings"]?["items"]?.AsArray()?.OfType<JsonObject>()
+            .FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), name, StringComparison.Ordinal))?.DeepClone().AsObject();
 
-        cleanSettings["items"] = new JsonArray(gameItem, frameItem, avatarItem);
-        sources.Add(cleanScene);
+        var gameItem = FindItem("Selected Game + Audio") ?? FindItem("BPSR Game + Audio");
+        if (gameItem is null) gameItem = CloneBaseItem("BPSR Game + Audio");
+        if (gameItem is not null)
+        {
+            gameItem["name"] = "Selected Game + Audio";
+            gameItem["source_uuid"] = selectedSource["uuid"]?.GetValue<string>();
+            if (!items.Contains(gameItem)) items.Insert(0, gameItem);
+        }
 
-        var sceneOrder = root["scene_order"]?.AsArray();
-        if (sceneOrder is not null && !sceneOrder.OfType<JsonObject>().Any(x => string.Equals(x["name"]?.GetValue<string>(), cleanSceneName, StringComparison.Ordinal)))
-            sceneOrder.Add(new JsonObject { ["name"] = cleanSceneName });
+        var frameItem = FindItem(frameSourceName) ?? CloneBaseItem(frameSourceName);
+        if (frameItem is not null && !items.Contains(frameItem)) items.Add(frameItem);
 
+        var pngItem = FindItem("FloodTuber Avatar") ?? CloneBaseItem("FloodTuber Avatar");
+        if (pngItem is not null && !items.Contains(pngItem)) items.Add(pngItem);
+
+        var vTubeItem = FindItem("VTube Studio Avatar");
+        if (vTubeItem is null)
+        {
+            vTubeItem = (gameItem ?? CloneBaseItem("BPSR Game + Audio"))?.DeepClone().AsObject();
+            if (vTubeItem is not null)
+            {
+                vTubeItem["name"] = "VTube Studio Avatar";
+                vTubeItem["source_uuid"] = vTube["uuid"]?.GetValue<string>();
+                vTubeItem["visible"] = false;
+                vTubeItem["locked"] = true;
+                vTubeItem["id"] = items.OfType<JsonObject>().Select(x => x["id"]?.GetValue<int>() ?? 0).DefaultIfEmpty().Max() + 1;
+                items.Add(vTubeItem);
+            }
+        }
+
+        settingsObj["id_counter"] = items.OfType<JsonObject>().Select(x => x["id"]?.GetValue<int>() ?? 0).DefaultIfEmpty().Max();
         File.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
     }
 
-    private static JsonObject? FindSource(JsonArray sources, string name)
-    {
-        return sources.OfType<JsonObject>()
-            .FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), name, StringComparison.Ordinal));
-    }
+    private static JsonObject? FindSource(JsonArray sources, string name) => sources.OfType<JsonObject>()
+        .FirstOrDefault(x => string.Equals(x["name"]?.GetValue<string>(), name, StringComparison.Ordinal));
 
     private static string DetectSimpleEncoder()
     {
         try
         {
             using var searcher = new ManagementObjectSearcher("SELECT Name FROM Win32_VideoController");
-            var names = searcher.Get().Cast<ManagementObject>()
-                .Select(obj => Convert.ToString(obj["Name"]) ?? string.Empty)
-                .ToArray();
-
+            var names = searcher.Get().Cast<ManagementObject>().Select(obj => Convert.ToString(obj["Name"]) ?? string.Empty).ToArray();
             if (names.Any(n => n.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))) return "nvenc";
             if (names.Any(n => n.Contains("AMD", StringComparison.OrdinalIgnoreCase) || n.Contains("Radeon", StringComparison.OrdinalIgnoreCase))) return "amd";
             if (names.Any(n => n.Contains("Intel", StringComparison.OrdinalIgnoreCase))) return "qsv";
         }
         catch { }
-
         return "x264";
     }
 
-    private static void ValidateCoreFiles()
+    private static void ValidateCoreFiles(bool needAitum)
     {
-        if (AppPaths.FindObsExe() is null)
-            throw new FileNotFoundException("Portable OBS is missing after setup.");
-
+        if (AppPaths.FindObsExe() is null) throw new FileNotFoundException("Portable OBS is missing after setup.");
         var obsRoot = AppPaths.FindObsRoot()!;
-        var floodTuber = Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll");
-        if (!File.Exists(floodTuber))
+        if (!File.Exists(Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll")))
             throw new FileNotFoundException("FloodTuber plugin is missing after setup.");
+        if (needAitum && FindAitumPlugin(obsRoot) is null)
+            throw new FileNotFoundException("Aitum Stream Suite is missing after setup.");
 
         var requiredAssets = new[]
         {
@@ -275,10 +401,31 @@ public sealed class SetupService
             Path.Combine(AppPaths.AssetsDirectory, "Screens", "Starting_1080p.png"),
             Path.Combine(AppPaths.AssetsDirectory, "Screens", "BRB_1080p.png")
         };
-
         var missing = requiredAssets.FirstOrDefault(path => !File.Exists(path));
-        if (missing is not null)
-            throw new FileNotFoundException("This StreamKit build is missing a required visual asset. Download the complete release ZIP again.", missing);
+        if (missing is not null) throw new FileNotFoundException("This StreamKit build is missing a required visual asset. Download the complete release ZIP again.", missing);
+    }
+
+    private static string? FindAitumPlugin(string obsRoot)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(Path.Combine(obsRoot, "obs-plugins"), "*.dll", SearchOption.AllDirectories)
+                .FirstOrDefault(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase));
+        }
+        catch { return null; }
+    }
+
+    private static string AitumConfigPath()
+    {
+        var configRoot = AppPaths.ObsConfigRoot() ?? throw new InvalidOperationException("Portable OBS config path could not be resolved.");
+        return Path.Combine(configRoot, "basic", "profiles", "Twitch 1080p", "aitum.json");
+    }
+
+    private static JsonObject? LoadAitumConfig()
+    {
+        var path = AitumConfigPath();
+        if (!File.Exists(path)) return null;
+        return JsonNode.Parse(File.ReadAllText(path))?.AsObject();
     }
 
     private async Task DownloadFileAsync(string url, string destination, int startPercent, int endPercent,
@@ -286,11 +433,9 @@ public sealed class SetupService
     {
         using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
-
         var total = response.Content.Headers.ContentLength;
         await using var input = await response.Content.ReadAsStreamAsync();
         await using var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-
         var buffer = new byte[81920];
         long readTotal = 0;
         int read;
@@ -298,7 +443,6 @@ public sealed class SetupService
         {
             await output.WriteAsync(buffer.AsMemory(0, read));
             readTotal += read;
-
             if (total is > 0)
             {
                 var fraction = Math.Clamp((double)readTotal / total.Value, 0, 1);
@@ -313,17 +457,13 @@ public sealed class SetupService
         if (!File.Exists(file)) return false;
         await using var stream = File.OpenRead(file);
         var hash = await SHA256.HashDataAsync(stream);
-        var actual = Convert.ToHexString(hash).ToLowerInvariant();
-        return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(Convert.ToHexString(hash).ToLowerInvariant(), expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void CopyDirectory(string source, string destination, bool overwrite)
     {
         Directory.CreateDirectory(destination);
-        foreach (var file in Directory.EnumerateFiles(source))
-            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite);
-
-        foreach (var directory in Directory.EnumerateDirectories(source))
-            CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)), overwrite);
+        foreach (var file in Directory.EnumerateFiles(source)) File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite);
+        foreach (var directory in Directory.EnumerateDirectories(source)) CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)), overwrite);
     }
 }
