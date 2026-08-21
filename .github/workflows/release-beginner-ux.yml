@@ -2,7 +2,7 @@ name: Release Beginner UX
 
 on:
   push:
-    branches: ['release/v2.0.0-auto']
+    branches: ['release/v2.*']
 
 permissions:
   contents: write
@@ -12,6 +12,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -27,7 +29,7 @@ jobs:
         shell: pwsh
         run: |
           @"
-          StreamKit v2.0.0 - Beginner-Friendly UI
+          StreamKit v2.0.1 - Beginner-Friendly UI
 
           1. Open your game.
           2. Run BPSRStreamKit.exe and choose the game + avatar.
@@ -39,14 +41,16 @@ jobs:
           - Keep your normal Discord microphone selected. StreamKit keeps its own mic out of the Discord share so your voice is not doubled.
 
           Full VTuber, first time only:
-          - StreamKit opens VTube Studio and shows a 3-step guide.
+          - StreamKit opens VTube Studio through Steam automatically.
           - Turn on the VTube Studio output switch named Spout2 output.
           - Backgrounds -> Color Picker Background -> Transparent in capture.
           - Click Check my avatar in StreamKit. StreamKit verifies the transparent avatar before continuing.
 
+          If you moved StreamKit to a different folder, Fix setup automatically repairs old OBS image paths.
+
           Twitch + TikTok, first time only:
           - StreamKit shows exact account-connection steps in the app.
-          - After the one-time connection, you do not need to understand or operate OBS for normal streaming.
+          - After the one-time connection, normal streaming does not require operating OBS.
 
           Audio safety is automatic:
           - Discord share: selected game sound, no duplicate StreamKit microphone.
@@ -78,8 +82,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release view v2.0.0-auto *> $null
+          $version = "${{ github.ref_name }}".Replace("release/", "")
+          gh release view $version *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release delete v2.0.0-auto --cleanup-tag --yes
+            gh release delete $version --cleanup-tag --yes
           }
-          gh release create v2.0.0-auto StreamKit-BeginnerUX.zip --title "v2.0.0 - Beginner-Friendly UI Overhaul" --notes "Fully automated UX modernization focused on newbie accessibility, built and released by AI agent."
+          $target = ((git ls-remote origin refs/heads/main) -split "`t")[0]
+          gh release create $version StreamKit-BeginnerUX.zip --target $target --title "$version - StreamKit Beginner UX" --notes "Fixes VTube Studio auto-launch, transparent avatar recovery, old portable OBS asset paths, and beginner dropdown labels."

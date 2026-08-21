@@ -32,23 +32,39 @@ public sealed class VTubeStudioService
 
     public void Launch()
     {
-        if (IsRunning()) return;
-        Process.Start(new ProcessStartInfo($"steam://rungameid/{SteamAppId}") { UseShellExecute = true });
+        // A stale/background process should not block the beginner flow. If there is no usable
+        // visible VTube Studio window, ask Steam to launch/restore the app again.
+        if (TryGetCaptureTarget() is not null) return;
+        LaunchThroughSteam();
     }
 
     public async Task<VTubeCaptureTarget> LaunchAndWaitAsync(TimeSpan? timeout = null)
     {
-        Launch();
-        var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(35));
+        var existing = TryGetCaptureTarget();
+        if (existing is not null) return existing;
+
+        var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(45));
+        var nextLaunchAttempt = DateTime.MinValue;
         while (DateTime.UtcNow < until)
         {
+            if (DateTime.UtcNow >= nextLaunchAttempt)
+            {
+                LaunchThroughSteam();
+                nextLaunchAttempt = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+            }
+
+            await Task.Delay(500);
             var target = TryGetCaptureTarget();
             if (target is not null) return target;
-            await Task.Delay(500);
         }
 
         throw new InvalidOperationException(
             "VTube Studio did not open a detectable window. Install/open VTube Studio in Steam, choose a Live2D model and webcam once, then retry Full VTuber mode.");
+    }
+
+    private static void LaunchThroughSteam()
+    {
+        Process.Start(new ProcessStartInfo($"steam://rungameid/{SteamAppId}") { UseShellExecute = true });
     }
 
     public VTubeCaptureTarget? TryGetCaptureTarget()
