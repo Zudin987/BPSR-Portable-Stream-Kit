@@ -201,15 +201,18 @@ public sealed class ObsService
         avatarSettings["custom_avatars_path"] = ObsPath(avatarDirectory);
 
         var vTube = FindSource(sources, "VTube Studio Avatar") ?? throw new InvalidOperationException("The VTube Studio source is missing. Use Advanced → Repair once.");
-        vTube["id"] = "spout_capture";
-        vTube["versioned_id"] = "spout_capture";
-        vTube["mixers"] = 0;
-        vTube["settings"] = new JsonObject
+        if (avatarMode == AvatarMode.VTubeStudio)
         {
-            ["spoutsenders"] = "VTubeStudioSpout",
-            ["tickspeedlimit"] = 100,
-            ["compositemode"] = 4
-        };
+            vTube["id"] = "spout_capture";
+            vTube["versioned_id"] = "spout_capture";
+            vTube["mixers"] = 0;
+            vTube["settings"] = new JsonObject
+            {
+                ["spoutsenders"] = "VTubeStudioSpout",
+                ["tickspeedlimit"] = 100,
+                ["compositemode"] = 4
+            };
+        }
 
         var frame = FindSource(sources, frameSourceName) ?? throw new InvalidOperationException($"The stream frame source '{frameSourceName}' is missing.");
         var frameSettings = frame["settings"]?.AsObject() ?? new JsonObject();
