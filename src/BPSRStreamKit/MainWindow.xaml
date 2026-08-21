@@ -29,12 +29,6 @@
                         </StackPanel>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="#14231D" BorderBrush="#28503F" BorderThickness="1" CornerRadius="18" Padding="12,7" Margin="0,0,8,0">
-                            <StackPanel Orientation="Horizontal">
-                                <Ellipse Width="7" Height="7" Fill="{StaticResource GoodBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Text="Beginner mode" FontSize="11" Foreground="#BFE9D3" Margin="7,0,0,0"/>
-                            </StackPanel>
-                        </Border>
                         <Button Style="{StaticResource GhostButton}" Content="Refresh" Click="Refresh_Click" ToolTip="Check your game and setup again."/>
                         <Button Style="{StaticResource GhostButton}" Content="Advanced settings" Click="Settings_Click" Margin="4,0,0,0" ToolTip="Technical tools are hidden here. You normally do not need them."/>
                     </StackPanel>
@@ -261,7 +255,7 @@
                 <Grid Margin="4,15,4,0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock x:Name="FooterStatus" Text="Ready when you are" FontSize="10" Foreground="#737C8E"/>
-                    <TextBlock Grid.Column="1" Text="v2.0.0" FontSize="10" Foreground="#737C8E"/>
+                    <TextBlock Grid.Column="1" Text="v2.0.2" FontSize="10" Foreground="#737C8E"/>
                 </Grid>
             </StackPanel>
         </ScrollViewer>
