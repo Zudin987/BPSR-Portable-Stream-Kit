@@ -28,14 +28,8 @@ public sealed class GameCatalogService
             var windows = EnumerateVisibleWindows();
             var result = new List<GameTarget>();
 
-            var bpsr = windows.FirstOrDefault(x => x.ProcessName.Equals("StarSEA", StringComparison.OrdinalIgnoreCase));
-            result.Add(bpsr is null
-                ? new GameTarget("Blue Protocol: Star Resonance", "StarSEA", "StarSEA.exe", "Blue Protocol: Star Resonance", "UnityWndClass", true, false)
-                : bpsr with { DisplayName = "Blue Protocol: Star Resonance", IsBpsr = true });
-
             foreach (var saved in LoadSaved())
             {
-                if (saved.IsBpsr) continue;
                 var running = windows.FirstOrDefault(x => x.ProcessName.Equals(saved.ProcessName, StringComparison.OrdinalIgnoreCase));
                 if (running is not null)
                     AddUnique(result, running with { DisplayName = saved.DisplayName });
@@ -44,12 +38,12 @@ public sealed class GameCatalogService
             }
 
             foreach (var candidate in windows)
-            {
-                if (candidate.IsBpsr || candidate.ProcessName.Equals("StarSEA", StringComparison.OrdinalIgnoreCase)) continue;
                 AddUnique(result, candidate);
-            }
 
-            return result;
+            return result
+                .OrderByDescending(x => x.IsRunning)
+                .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         });
     }
 
@@ -71,8 +65,6 @@ public sealed class GameCatalogService
 
     public void Save(GameTarget target)
     {
-        if (target.IsBpsr) return;
-
         var saved = LoadSaved().Where(x => !x.ProcessName.Equals(target.ProcessName, StringComparison.OrdinalIgnoreCase)).ToList();
         saved.Insert(0, target with { IsRunning = false });
         if (saved.Count > 12) saved = saved.Take(12).ToList();
@@ -146,7 +138,6 @@ public sealed class GameCatalogService
         return results
             .GroupBy(x => x.ProcessName, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.OrderByDescending(x => x.WindowTitle.Length).First())
-            .OrderBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
