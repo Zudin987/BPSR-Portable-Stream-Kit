@@ -34,7 +34,7 @@ public partial class MainWindow : Window
 
     private readonly IReadOnlyList<AvatarChoice> _avatars = new[]
     {
-        new AvatarChoice(AvatarMode.VTubeStudio, "Full VTuber", "Face-tracked Live2D via VTube Studio"),
+        new AvatarChoice(AvatarMode.VTubeStudio, "Full VTuber", "Face-tracked Live2D via VTube Studio + Spout2"),
         new AvatarChoice(AvatarMode.PngAvatar, "PNG Avatar", "Lightweight FloodTuber fallback"),
         new AvatarChoice(AvatarMode.None, "None", "Game + frame only")
     };
@@ -53,6 +53,7 @@ public partial class MainWindow : Window
     private static string ThemePreferenceFile => Path.Combine(AppPaths.Root, ".streamkit-theme");
     private static string AvatarPreferenceFile => Path.Combine(AppPaths.Root, ".streamkit-avatar");
     private static string ModePreferenceFile => Path.Combine(AppPaths.Root, ".streamkit-mode");
+    private static string SpoutOnboardingFile => Path.Combine(AppPaths.Root, "user-data", "vtube-spout-onboarding-v1.txt");
 
     public MainWindow()
     {
@@ -127,19 +128,21 @@ public partial class MainWindow : Window
     {
         var game = SelectedGame;
         var gameName = game?.DisplayName ?? "Selected game";
+        var spoutReady = _selectedAvatar != AvatarMode.VTubeStudio || _setup.IsSpoutReady();
         SetStatus(GameStatusDot, GameStatusText, state.GameRunning,
             $"{gameName} detected", game is null ? "Choose or open a game" : $"Waiting for {gameName}");
 
-        var engineReady = state.ObsReady && (_selectedMode != StreamMode.AllPlatforms || state.AitumReady);
+        var engineReady = state.ObsReady && (_selectedMode != StreamMode.AllPlatforms || state.AitumReady) && spoutReady;
         SetStatus(ObsStatusDot, ObsStatusText, engineReady,
-            _selectedMode == StreamMode.AllPlatforms ? "OBS + Aitum ready" : "Portable OBS ready",
-            _selectedMode == StreamMode.AllPlatforms ? "OBS/Aitum will be prepared" : "Portable OBS needs setup");
+            _selectedMode == StreamMode.AllPlatforms ? "OBS + streaming plugins ready" : "Portable OBS ready",
+            _selectedMode == StreamMode.AllPlatforms ? "OBS/plugins will be prepared" : "Portable OBS needs setup");
 
         switch (_selectedAvatar)
         {
             case AvatarMode.VTubeStudio:
-                SetStatus(AvatarStatusDot, AvatarStatusText, state.VTubeStudioRunning,
-                    "VTube Studio tracking app open", "VTube Studio opens automatically");
+                SetStatus(AvatarStatusDot, AvatarStatusText, state.VTubeStudioRunning && spoutReady,
+                    "VTube Studio + Spout2 ready",
+                    spoutReady ? "VTube Studio opens automatically" : "Spout2 installs automatically");
                 break;
             case AvatarMode.PngAvatar:
                 SetStatus(AvatarStatusDot, AvatarStatusText, state.AvatarReady,
@@ -154,6 +157,7 @@ public partial class MainWindow : Window
             "Game + Mic isolated", "Private audio setup needed");
 
         var needsSetup = !state.ObsReady
+                         || (_selectedAvatar == AvatarMode.VTubeStudio && !spoutReady)
                          || (_selectedAvatar == AvatarMode.PngAvatar && !state.AvatarReady)
                          || (_selectedMode == StreamMode.AllPlatforms && !state.AitumReady);
         if (needsSetup)
@@ -162,8 +166,8 @@ public partial class MainWindow : Window
             HeroEyebrow.Foreground = (Brush)FindResource("WarnBrush");
             HeroTitle.Text = "One click from ready";
             HeroSubtitle.Text = _selectedMode == StreamMode.AllPlatforms
-                ? "StreamKit will prepare portable OBS, Aitum vertical/multistream support and your selected avatar mode."
-                : "StreamKit will prepare portable OBS, the selected frame and your avatar mode automatically.";
+                ? "StreamKit will prepare portable OBS, Spout2 VTuber capture, Aitum vertical/multistream support and your selected avatar mode."
+                : "StreamKit will prepare portable OBS, transparent Spout2 VTuber capture, the selected frame and your avatar mode automatically.";
             MainActionButton.Content = "Set up & " + GetActionLabel();
             FooterStatus.Text = "First-run setup stays inside this folder";
             return;
@@ -206,7 +210,11 @@ public partial class MainWindow : Window
             var game = SelectedGame ?? throw new InvalidOperationException("Open a game, press Scan games, then choose it first.");
             var state = await _detection.DetectAsync(game);
             var needAitum = _selectedMode == StreamMode.AllPlatforms;
-            var showProgress = !state.ObsReady || (_selectedAvatar == AvatarMode.PngAvatar && !state.AvatarReady) || (needAitum && !state.AitumReady);
+            var needSpout = _selectedAvatar == AvatarMode.VTubeStudio;
+            var showProgress = !state.ObsReady
+                               || (needSpout && !_setup.IsSpoutReady())
+                               || (_selectedAvatar == AvatarMode.PngAvatar && !state.AvatarReady)
+                               || (needAitum && !state.AitumReady);
             if (showProgress) SetupProgressPanel.Visibility = Visibility.Visible;
 
             var progress = new Progress<(int Percent, string Message)>(value =>
@@ -214,7 +222,7 @@ public partial class MainWindow : Window
                 SetupProgress.Value = value.Percent;
                 SetupStatusText.Text = value.Message;
             });
-            await _setup.EnsureReadyAsync(showProgress ? progress : null, needAitum: needAitum);
+            await _setup.EnsureReadyAsync(showProgress ? progress : null, needAitum: needAitum, needSpout: needSpout);
 
             VTubeCaptureTarget? vTubeTarget = null;
             if (_selectedAvatar == AvatarMode.VTubeStudio)
@@ -223,6 +231,8 @@ public partial class MainWindow : Window
                 SetupProgress.Value = 100;
                 SetupStatusText.Text = "Opening VTube Studio through Steam…";
                 vTubeTarget = await _vTubeStudio.LaunchAndWaitAsync();
+                SetupProgressPanel.Visibility = Visibility.Collapsed;
+                ShowSpoutOnboardingOnce();
             }
             SetupProgressPanel.Visibility = Visibility.Collapsed;
 
@@ -305,6 +315,27 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ShowSpoutOnboardingOnce()
+    {
+        try
+        {
+            if (File.Exists(SpoutOnboardingFile)) return;
+
+            MessageBox.Show(this,
+                "StreamKit already installed Spout2 into its portable OBS. Do these VTube Studio steps once:\n\n" +
+                "1. In VTube Studio settings, turn ON Spout2 output.\n" +
+                "2. Select the Color Picker Background.\n" +
+                "3. Set it to transparent black and enable Transparent in capture.\n" +
+                "4. Leave the sender name as VTubeStudioSpout.\n\n" +
+                "Then press OK. StreamKit's OBS source is already set to Spout2 with Premultiplied Alpha, so the VTube Studio background/UI will not be shown.",
+                "One-time Full VTuber setup", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(SpoutOnboardingFile)!);
+            File.WriteAllText(SpoutOnboardingFile, "VTube Studio Spout2 onboarding shown.");
+        }
+        catch { }
+    }
+
     private void ApplyModeSelection()
     {
         SetSegment(DiscordOnlySegment, _selectedMode == StreamMode.DiscordOnly);
@@ -332,7 +363,7 @@ public partial class MainWindow : Window
     }
 
     private void UpdateThemeCard() => ThemeDetailText.Text = SelectedThemeChoice?.Detail ?? "Sakura · decorated pink frame";
-    private void UpdateAvatarCard() => AvatarDetailText.Text = SelectedAvatarChoice?.Detail ?? "Face-tracked Live2D via VTube Studio";
+    private void UpdateAvatarCard() => AvatarDetailText.Text = SelectedAvatarChoice?.Detail ?? "Face-tracked Live2D via VTube Studio + Spout2";
 
     private StreamTheme LoadSavedTheme()
     {
@@ -464,7 +495,9 @@ public partial class MainWindow : Window
                 SetupProgress.Value = value.Percent;
                 SetupStatusText.Text = value.Message;
             });
-            await _setup.EnsureReadyAsync(progress, repair: true, needAitum: _selectedMode == StreamMode.AllPlatforms);
+            await _setup.EnsureReadyAsync(progress, repair: true,
+                needAitum: _selectedMode == StreamMode.AllPlatforms,
+                needSpout: _selectedAvatar == AvatarMode.VTubeStudio);
             FooterStatus.Text = "Repair complete · local OBS/Aitum account settings preserved";
         }
         catch (Exception ex)
