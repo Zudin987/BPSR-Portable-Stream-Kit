@@ -64,7 +64,7 @@ public sealed class SetupService
         }
 
         progress?.Report((82, "Preparing stream layouts…"));
-        InstallConfigTemplates(repair);
+        InstallConfigTemplates(repair, needSpout);
         EnsureObsUpdatePolicy();
 
         var password = ObsAutomationService.GetOrCreatePassword();
@@ -288,7 +288,7 @@ public sealed class SetupService
         return copied;
     }
 
-    private void InstallConfigTemplates(bool repair)
+    private void InstallConfigTemplates(bool repair, bool useSpout)
     {
         if (!Directory.Exists(AppPaths.TemplatesDirectory))
             throw new DirectoryNotFoundException("The templates folder is missing from this StreamKit release.");
@@ -310,7 +310,7 @@ public sealed class SetupService
             File.WriteAllText(destination, text);
         }
 
-        EnsureCleanGameScenes(configRoot);
+        EnsureCleanGameScenes(configRoot, useSpout);
         var userIni = Path.Combine(configRoot, "user.ini");
         if (!File.Exists(userIni))
         {
@@ -352,14 +352,14 @@ public sealed class SetupService
         File.WriteAllLines(path, lines);
     }
 
-    private static void EnsureCleanGameScenes(string configRoot)
+    private static void EnsureCleanGameScenes(string configRoot, bool useSpout)
     {
         var sceneRoot = Path.Combine(configRoot, "basic", "scenes");
-        EnsureCleanGameScene(Path.Combine(sceneRoot, "BPSR_Horizontal.json"), "Discord Share", "Game Clean", "Minimal Stream Frame");
-        EnsureCleanGameScene(Path.Combine(sceneRoot, "BPSR_TikTok_Vertical.json"), "TikTok Live", "Game Clean Vertical", "TikTok Minimal Frame");
+        EnsureCleanGameScene(Path.Combine(sceneRoot, "BPSR_Horizontal.json"), "Discord Share", "Game Clean", "Minimal Stream Frame", useSpout);
+        EnsureCleanGameScene(Path.Combine(sceneRoot, "BPSR_TikTok_Vertical.json"), "TikTok Live", "Game Clean Vertical", "TikTok Minimal Frame", useSpout);
     }
 
-    private static void EnsureCleanGameScene(string file, string baseSceneName, string cleanSceneName, string frameSourceName)
+    private static void EnsureCleanGameScene(string file, string baseSceneName, string cleanSceneName, string frameSourceName, bool useSpout)
     {
         if (!File.Exists(file)) return;
         var root = JsonNode.Parse(File.ReadAllText(file))?.AsObject();
@@ -389,17 +389,29 @@ public sealed class SetupService
             vTube = selectedSource.DeepClone().AsObject();
             vTube["name"] = "VTube Studio Avatar";
             vTube["uuid"] = Guid.NewGuid().ToString();
+            vTube["mixers"] = 0;
+            var settings = vTube["settings"]?.AsObject() ?? new JsonObject();
+            vTube["settings"] = settings;
+            settings["window"] = "VTube Studio:UnityWndClass:VTube Studio.exe";
+            settings["capture_mode"] = "window";
+            settings["capture_audio"] = false;
+            settings["capture_cursor"] = false;
+            settings["allow_transparency"] = true;
+            settings["anti_cheat_hook"] = false;
             sources.Insert(Math.Max(0, sources.IndexOf(selectedSource) + 1), vTube);
         }
-        vTube["id"] = "spout_capture";
-        vTube["versioned_id"] = "spout_capture";
-        vTube["mixers"] = 0;
-        vTube["settings"] = new JsonObject
+        if (useSpout)
         {
-            ["spoutsenders"] = "VTubeStudioSpout",
-            ["tickspeedlimit"] = 100,
-            ["compositemode"] = 4
-        };
+            vTube["id"] = "spout_capture";
+            vTube["versioned_id"] = "spout_capture";
+            vTube["mixers"] = 0;
+            vTube["settings"] = new JsonObject
+            {
+                ["spoutsenders"] = "VTubeStudioSpout",
+                ["tickspeedlimit"] = 100,
+                ["compositemode"] = 4
+            };
+        }
 
         var baseScene = FindSource(sources, baseSceneName);
         if (baseScene is null) return;
