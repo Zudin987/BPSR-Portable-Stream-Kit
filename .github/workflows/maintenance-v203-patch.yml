@@ -1,0 +1,401 @@
+name: Apply v2.0.3 maintenance patch
+
+on:
+  push:
+    branches: [maintenance/v2.0.3]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[v203-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply audited maintenance fixes
+        shell: python
+        run: |
+          import pathlib, re
+
+          def read(path):
+              return pathlib.Path(path).read_text(encoding='utf-8')
+          def write(path, text):
+              pathlib.Path(path).write_text(text, encoding='utf-8', newline='\n')
+          def replace(path, old, new, count=None):
+              text = read(path)
+              if old not in text:
+                  raise SystemExit(f'missing expected text in {path}: {old[:120]!r}')
+              text = text.replace(old, new, count if count is not None else -1)
+              write(path, text)
+          def regex(path, pattern, repl, count=1):
+              text = read(path)
+              new, n = re.subn(pattern, repl, text, count=count, flags=re.S)
+              if n != count:
+                  raise SystemExit(f'expected {count} regex replacements in {path}, got {n}: {pattern[:120]}')
+              write(path, new)
+
+          # Version + local files.
+          replace('src/BPSRStreamKit/BPSRStreamKit.csproj', '<Version>2.0.2</Version>', '<Version>2.0.3</Version>')
+          replace('src/BPSRStreamKit/BPSRStreamKit.csproj', '<FileVersion>2.0.2.0</FileVersion>', '<FileVersion>2.0.3.0</FileVersion>')
+          replace('src/BPSRStreamKit/BPSRStreamKit.csproj', '<AssemblyVersion>2.0.2.0</AssemblyVersion>', '<AssemblyVersion>2.0.3.0</AssemblyVersion>')
+          xaml = read('src/BPSRStreamKit/MainWindow.xaml').replace('v2.0.2', 'v2.0.3')
+          write('src/BPSRStreamKit/MainWindow.xaml', xaml)
+          replace('src/BPSRStreamKit/app.manifest', 'requestedExecutionLevel level="requireAdministrator"', 'requestedExecutionLevel level="asInvoker"')
+
+          gitignore = read('.gitignore')
+          if 'user-data/' not in gitignore:
+              gitignore += '\n# StreamKit local preferences / generated secrets\nuser-data/\n.streamkit-*\n'
+          write('.gitignore', gitignore)
+
+          # One canonical release workflow only. The normal build workflow owns packaging + release.
+          release_ux = pathlib.Path('.github/workflows/release-beginner-ux.yml')
+          if release_ux.exists():
+              release_ux.unlink()
+          build = read('.github/workflows/build-windows.yml')
+          build = build.replace("    tags: ['v*']\n", '')
+          build = build.replace("    if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v')", "    if: startsWith(github.ref, 'refs/heads/release/v')")
+          build = build.replace('StreamKit v0.4.2', 'StreamKit v2.0.3')
+          old_release = '''          if [[ "$GITHUB_REF" == refs/heads/release/v* ]]; then
+            version="${GITHUB_REF_NAME#release/}"
+            if gh release view "$version" >/dev/null 2>&1; then gh release delete "$version" --cleanup-tag --yes; fi
+            gh release create "$version" "$zip" --target "$GITHUB_SHA" --generate-notes --title "StreamKit $version"
+          else
+            version="$GITHUB_REF_NAME"
+            if gh release view "$version" >/dev/null 2>&1; then gh release upload "$version" "$zip" --clobber; else gh release create "$version" "$zip" --target "$GITHUB_SHA" --generate-notes --title "StreamKit $version"; fi
+          fi'''
+          new_release = '''          version="${GITHUB_REF_NAME#release/}"
+          target="$(gh api "repos/$GH_REPO/commits/main" --jq .sha)"
+          if gh release view "$version" >/dev/null 2>&1; then gh release delete "$version" --cleanup-tag --yes; fi
+          gh release create "$version" "$zip" --target "$target" --generate-notes --title "StreamKit $version"'''
+          if old_release not in build:
+              raise SystemExit('release block changed unexpectedly')
+          build = build.replace(old_release, new_release)
+          write('.github/workflows/build-windows.yml', build)
+
+          # Audio hardening: touch StreamKit collections only, and explicitly remove unused global aux devices.
+          regex('src/BPSRStreamKit/Services/AudioPrivacyService.cs',
+                r'''        foreach \(var file in Directory\.EnumerateFiles\(sceneRoot, "\\\*\.json", SearchOption\.TopDirectoryOnly\)\)\n        \{\n            try \{ HardenSceneCollection\(file\); \}\n            catch \{ /\* Never destroy an otherwise usable collection because of one malformed optional source\. \*/ \}\n        \}''',
+                '''        foreach (var name in new[] { "BPSR_Horizontal.json", "BPSR_TikTok_Vertical.json" })
+        {
+            var file = Path.Combine(sceneRoot, name);
+            if (!File.Exists(file)) continue;
+            try { HardenSceneCollection(file); }
+            catch { /* Never destroy an otherwise usable StreamKit collection because of one malformed optional source. */ }
+        }''')
+          replace('src/BPSRStreamKit/Services/AudioPrivacyService.cs',
+                  '        for (var i = 1; i <= 4; i++) root.Remove($"DesktopAudioDevice{i}");\n\n        if (root["AuxAudioDevice1"] is JsonObject mic)',
+                  '        for (var i = 1; i <= 4; i++) root.Remove($"DesktopAudioDevice{i}");\n        for (var i = 2; i <= 4; i++) root.Remove($"AuxAudioDevice{i}");\n\n        if (root["AuxAudioDevice1"] is JsonObject mic)')
+
+          # Avoid Check Avatar killing an active share/stream.
+          replace('src/BPSRStreamKit/MainWindow.xaml.cs',
+                  '        CheckAvatarButton.IsEnabled = !busy;',
+                  '        CheckAvatarButton.IsEnabled = !busy && !_streamActive;')
+          replace('src/BPSRStreamKit/MainWindow.xaml.cs',
+                  '''    private async void CheckAvatar_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy || _selectedAvatar != AvatarMode.VTubeStudio) return;
+        try''',
+                  '''    private async void CheckAvatar_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy || _selectedAvatar != AvatarMode.VTubeStudio) return;
+        if (_streamActive)
+        {
+            ShowProblem("Avatar check is unavailable while live", "Stop the current share/stream before running the avatar test. Your live OBS session will not be restarted.");
+            return;
+        }
+        try''')
+
+          # WebSocket isolation + finite per-request timeout.
+          replace('src/BPSRStreamKit/Services/ObsAutomationService.cs', '    public const int Port = 4455;', '    public const int Port = 44561;')
+          regex('src/BPSRStreamKit/Services/ObsAutomationService.cs',
+                r'''        public async Task<JsonObject\?> RequestAsync\(string requestType, JsonObject\? requestData = null\)\n        \{\n            var requestId = Guid\.NewGuid\(\)\.ToString\("N"\);\n            var d = new JsonObject \{ \["requestType"\] = requestType, \["requestId"\] = requestId \};\n            if \(requestData is not null\) d\["requestData"\] = requestData;\n            await SendObjectAsync\(new JsonObject \{ \["op"\] = 6, \["d"\] = d \}, CancellationToken\.None\);\n\n            while \(true\)\n            \{\n                var message = await ReceiveObjectAsync\(CancellationToken\.None\);\n                if \(message\?\["op"\]\?\.GetValue<int>\(\) != 7\) continue;\n                var body = message\["d"\]\?\.AsObject\(\);\n                if \(!string\.Equals\(body\?\["requestId"\]\?\.GetValue<string>\(\), requestId, StringComparison\.Ordinal\)\) continue;\n                var status = body\?\["requestStatus"\]\?\.AsObject\(\);\n                if \(status\?\["result"\]\?\.GetValue<bool>\(\) != true\)\n                \{\n                    var comment = status\?\["comment"\]\?\.GetValue<string>\(\) \?\? \$"OBS request '\{requestType\}' failed\.";\n                    throw new InvalidOperationException\(comment\);\n                \}\n                return body\?\["responseData"\]\?\.AsObject\(\);\n            \}\n        \}''',
+                '''        public async Task<JsonObject?> RequestAsync(string requestType, JsonObject? requestData = null)
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            try
+            {
+                var requestId = Guid.NewGuid().ToString("N");
+                var d = new JsonObject { ["requestType"] = requestType, ["requestId"] = requestId };
+                if (requestData is not null) d["requestData"] = requestData;
+                await SendObjectAsync(new JsonObject { ["op"] = 6, ["d"] = d }, cts.Token);
+
+                while (true)
+                {
+                    var message = await ReceiveObjectAsync(cts.Token);
+                    if (message?["op"]?.GetValue<int>() != 7) continue;
+                    var body = message["d"]?.AsObject();
+                    if (!string.Equals(body?["requestId"]?.GetValue<string>(), requestId, StringComparison.Ordinal)) continue;
+                    var status = body?["requestStatus"]?.AsObject();
+                    if (status?["result"]?.GetValue<bool>() != true)
+                    {
+                        var comment = status?["comment"]?.GetValue<string>() ?? $"OBS request '{requestType}' failed.";
+                        throw new InvalidOperationException(comment);
+                    }
+                    return body?["responseData"]?.AsObject();
+                }
+            }
+            catch (OperationCanceledException ex)
+            {
+                throw new TimeoutException($"OBS request '{requestType}' timed out.", ex);
+            }
+        }''')
+
+          # Auto-fit the real transparent model in horizontal scenes and the Aitum vertical Live scene.
+          regex('src/BPSRStreamKit/Services/ObsAutomationService.cs',
+                r'''            foreach \(var sceneName in VTubeHorizontalScenes\)\n            \{\n                try\n                \{\n                    var itemsResponse = await session\.RequestAsync\("GetSceneItemList", new JsonObject \{ \["sceneName"\] = sceneName \}\);\n                    var item = itemsResponse\?\["sceneItems"\]\?\.AsArray\(\)\?\.OfType<JsonObject>\(\)\n                        \.FirstOrDefault\(x => string\.Equals\(x\["sourceName"\]\?\.GetValue<string>\(\), VTubeInputName, StringComparison\.Ordinal\)\);\n                    var sceneItemId = item\?\["sceneItemId"\]\?\.GetValue<int>\(\) \?\? 0;\n                    if \(sceneItemId <= 0\) continue;\n\n                    var transformResponse = await session\.RequestAsync\("GetSceneItemTransform", new JsonObject\n                    \{\n                        \["sceneName"\] = sceneName, \["sceneItemId"\] = sceneItemId\n                    \}\);\n                    var transform = transformResponse\?\["sceneItemTransform"\]\?\.AsObject\(\);\n                    var sourceWidth = transform\?\["sourceWidth"\]\?\.GetValue<double>\(\) \?\? 1920\.0;\n                    var sourceHeight = transform\?\["sourceHeight"\]\?\.GetValue<double>\(\) \?\? 1080\.0;\n                    if \(sourceWidth <= 0\) sourceWidth = 1920\.0;\n                    if \(sourceHeight <= 0\) sourceHeight = 1080\.0;\n\n                    var cropLeft = Math\.Clamp\(left \* sourceWidth, 0, Math\.Max\(0, sourceWidth - 2\)\);\n                    var cropTop = Math\.Clamp\(top \* sourceHeight, 0, Math\.Max\(0, sourceHeight - 2\)\);\n                    var cropRight = Math\.Clamp\(\(1\.0 - right\) \* sourceWidth, 0, Math\.Max\(0, sourceWidth - cropLeft - 2\)\);\n                    var cropBottom = Math\.Clamp\(\(1\.0 - bottom\) \* sourceHeight, 0, Math\.Max\(0, sourceHeight - cropTop - 2\)\);\n\n                    await session\.RequestAsync\("SetSceneItemTransform", new JsonObject\n                    \{\n                        \["sceneName"\] = sceneName,\n                        \["sceneItemId"\] = sceneItemId,\n                        \["sceneItemTransform"\] = new JsonObject\n                        \{\n                            \["positionX"\] = 20\.0, \["positionY"\] = 490\.0, \["alignment"\] = 5,\n                            \["cropLeft"\] = cropLeft, \["cropTop"\] = cropTop, \["cropRight"\] = cropRight, \["cropBottom"\] = cropBottom,\n                            \["boundsType"\] = "OBS_BOUNDS_SCALE_INNER", \["boundsAlignment"\] = 5,\n                            \["boundsWidth"\] = 520\.0, \["boundsHeight"\] = 570\.0\n                        \}\n                    \}\);\n                    await session\.RequestAsync\("SetSceneItemEnabled", new JsonObject\n                    \{\n                        \["sceneName"\] = sceneName, \["sceneItemId"\] = sceneItemId, \["sceneItemEnabled"\] = true\n                    \}\);\n                \}\n                catch \{ \}\n            \}''',
+                '''            var targets = new (string Scene, string Source, double X, double Y, double Width, double Height)[]
+            {
+                ("Game Clean", VTubeInputName, 20, 490, 520, 570),
+                ("Discord Share", VTubeInputName, 20, 490, 520, 570),
+                ("Twitch Live", VTubeInputName, 20, 490, 520, 570),
+                ("Vertical Live", "Vertical - VTube Studio Avatar", 20, 1270, 560, 650)
+            };
+
+            foreach (var target in targets)
+            {
+                try
+                {
+                    var itemsResponse = await session.RequestAsync("GetSceneItemList", new JsonObject { ["sceneName"] = target.Scene });
+                    var item = itemsResponse?["sceneItems"]?.AsArray()?.OfType<JsonObject>()
+                        .FirstOrDefault(x => string.Equals(x["sourceName"]?.GetValue<string>(), target.Source, StringComparison.Ordinal));
+                    var sceneItemId = item?["sceneItemId"]?.GetValue<int>() ?? 0;
+                    if (sceneItemId <= 0) continue;
+
+                    var transformResponse = await session.RequestAsync("GetSceneItemTransform", new JsonObject
+                    {
+                        ["sceneName"] = target.Scene, ["sceneItemId"] = sceneItemId
+                    });
+                    var transform = transformResponse?["sceneItemTransform"]?.AsObject();
+                    var sourceWidth = transform?["sourceWidth"]?.GetValue<double>() ?? 1920.0;
+                    var sourceHeight = transform?["sourceHeight"]?.GetValue<double>() ?? 1080.0;
+                    if (sourceWidth <= 0) sourceWidth = 1920.0;
+                    if (sourceHeight <= 0) sourceHeight = 1080.0;
+
+                    var cropLeft = Math.Clamp(left * sourceWidth, 0, Math.Max(0, sourceWidth - 2));
+                    var cropTop = Math.Clamp(top * sourceHeight, 0, Math.Max(0, sourceHeight - 2));
+                    var cropRight = Math.Clamp((1.0 - right) * sourceWidth, 0, Math.Max(0, sourceWidth - cropLeft - 2));
+                    var cropBottom = Math.Clamp((1.0 - bottom) * sourceHeight, 0, Math.Max(0, sourceHeight - cropTop - 2));
+
+                    await session.RequestAsync("SetSceneItemTransform", new JsonObject
+                    {
+                        ["sceneName"] = target.Scene,
+                        ["sceneItemId"] = sceneItemId,
+                        ["sceneItemTransform"] = new JsonObject
+                        {
+                            ["positionX"] = target.X, ["positionY"] = target.Y, ["alignment"] = 5,
+                            ["cropLeft"] = cropLeft, ["cropTop"] = cropTop, ["cropRight"] = cropRight, ["cropBottom"] = cropBottom,
+                            ["boundsType"] = "OBS_BOUNDS_SCALE_INNER", ["boundsAlignment"] = 5,
+                            ["boundsWidth"] = target.Width, ["boundsHeight"] = target.Height
+                        }
+                    });
+                    await session.RequestAsync("SetSceneItemEnabled", new JsonObject
+                    {
+                        ["sceneName"] = target.Scene, ["sceneItemId"] = sceneItemId, ["sceneItemEnabled"] = true
+                    });
+                }
+                catch { }
+            }''')
+
+          # Setup/Repair: force a clean reinstall of selected runtime plugins, validate non-trivial DLLs,
+          # and verify FloodTuber/Aitum archives against GitHub's official release-asset SHA-256 digest.
+          replace('src/BPSRStreamKit/Services/SetupService.cs',
+                  '''        var obsRoot = AppPaths.FindObsRoot() ?? throw new InvalidOperationException("OBS was downloaded but obs64.exe could not be found.");
+        File.WriteAllText(Path.Combine(obsRoot, "portable_mode.txt"), string.Empty);''',
+                  '''        var obsRoot = AppPaths.FindObsRoot() ?? throw new InvalidOperationException("OBS was downloaded but obs64.exe could not be found.");
+        if (repair) ResetRuntimeComponentsForRepair(obsRoot, needAitum, needSpout);
+        File.WriteAllText(Path.Combine(obsRoot, "portable_mode.txt"), string.Empty);''')
+
+          regex('src/BPSRStreamKit/Services/SetupService.cs',
+                r'''    private async Task EnsureFloodTuberAsync\(string obsRoot, IProgress<\(int Percent, string Message\)>\? progress\)\n    \{.*?\n    \}\n\n    private async Task EnsureSpoutAsync''',
+                '''    private async Task EnsureFloodTuberAsync(string obsRoot, IProgress<(int Percent, string Message)>? progress)
+    {
+        var pluginDll = Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll");
+        if (IsUsablePluginFile(pluginDll)) return;
+        try { if (File.Exists(pluginDll)) File.Delete(pluginDll); } catch { }
+
+        var zipPath = Path.Combine(AppPaths.CacheDirectory, $"FloodTuber-Portable-v{FloodTuberVersion}.zip");
+        var expectedSha = await GetOfficialGitHubAssetSha256Async("justflood/flood-tuber", "v1.1.0", $"FloodTuber-Portable-v{FloodTuberVersion}.zip");
+        if (!File.Exists(zipPath) || !await VerifySha256Async(zipPath, expectedSha))
+        {
+            try { if (File.Exists(zipPath)) File.Delete(zipPath); } catch { }
+            await DownloadFileAsync(FloodTuberUrl, zipPath, 53, 60, progress, "Downloading PNG avatar fallback");
+        }
+        if (!await VerifySha256Async(zipPath, expectedSha))
+            throw new InvalidDataException("FloodTuber download failed its official GitHub SHA-256 verification. Nothing was installed.");
+
+        var tempDir = Path.Combine(AppPaths.CacheDirectory, "floodtuber-temp");
+        if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
+            var sourceDll = Directory.EnumerateFiles(tempDir, "flood-tuber.dll", SearchOption.AllDirectories).FirstOrDefault();
+            if (sourceDll is null || !IsUsablePluginFile(sourceDll))
+                throw new InvalidDataException("FloodTuber archive did not contain a usable flood-tuber.dll.");
+            Directory.CreateDirectory(Path.GetDirectoryName(pluginDll)!);
+            File.Copy(sourceDll, pluginDll, overwrite: true);
+
+            var dataDirectory = Directory.EnumerateDirectories(tempDir, "flood-tuber", SearchOption.AllDirectories)
+                .FirstOrDefault(path => path.Replace('\\\\', '/').Contains("/data/obs-plugins/flood-tuber", StringComparison.OrdinalIgnoreCase));
+            if (dataDirectory is not null)
+                CopyDirectory(dataDirectory, Path.Combine(obsRoot, "data", "obs-plugins", "flood-tuber"), overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(zipPath); } catch { }
+            throw;
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    private async Task EnsureSpoutAsync''')
+
+          regex('src/BPSRStreamKit/Services/SetupService.cs',
+                r'''    private async Task EnsureAitumAsync\(string obsRoot, IProgress<\(int Percent, string Message\)>\? progress\)\n    \{.*?\n    \}\n\n    private static int CopyPortableObsPlugin''',
+                '''    private async Task EnsureAitumAsync(string obsRoot, IProgress<(int Percent, string Message)>? progress)
+    {
+        if (FindAitumPlugin(obsRoot) is not null) return;
+
+        var zipPath = Path.Combine(AppPaths.CacheDirectory, $"aitum-stream-suite-{AitumVersion}-windows.zip");
+        var expectedSha = await GetOfficialGitHubAssetSha256Async("Aitum/obs-aitum-stream-suite", AitumVersion, "aitum-stream-suite-windows.zip");
+        if (!File.Exists(zipPath) || !await VerifySha256Async(zipPath, expectedSha))
+        {
+            try { if (File.Exists(zipPath)) File.Delete(zipPath); } catch { }
+            await DownloadFileAsync(AitumUrl, zipPath, 70, 78, progress, "Downloading Aitum multistream support");
+        }
+        if (!await VerifySha256Async(zipPath, expectedSha))
+            throw new InvalidDataException("Aitum download failed its official GitHub SHA-256 verification. Nothing was installed.");
+
+        var tempDir = Path.Combine(AppPaths.CacheDirectory, "aitum-temp");
+        if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
+            var copied = CopyPortableObsPlugin(tempDir, obsRoot);
+            if (copied == 0 || FindAitumPlugin(obsRoot) is null)
+                throw new InvalidDataException("Aitum Stream Suite archive did not contain the expected portable OBS plugin files.");
+        }
+        catch
+        {
+            try { File.Delete(zipPath); } catch { }
+            throw;
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    private static int CopyPortableObsPlugin''')
+
+          replace('src/BPSRStreamKit/Services/SetupService.cs',
+                  '        if (!File.Exists(Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll")))\n            throw new FileNotFoundException("FloodTuber plugin is missing after setup.");',
+                  '        if (!IsUsablePluginFile(Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll")))\n            throw new FileNotFoundException("FloodTuber plugin is missing or damaged after setup.");')
+          replace('src/BPSRStreamKit/Services/SetupService.cs',
+                  '        if (File.Exists(expected)) return expected;',
+                  '        if (IsUsablePluginFile(expected)) return expected;', 1)
+          replace('src/BPSRStreamKit/Services/SetupService.cs',
+                  '            return Directory.EnumerateFiles(Path.Combine(obsRoot, "obs-plugins"), "win-spout.dll", SearchOption.AllDirectories).FirstOrDefault();',
+                  '            return Directory.EnumerateFiles(Path.Combine(obsRoot, "obs-plugins"), "win-spout.dll", SearchOption.AllDirectories).FirstOrDefault(IsUsablePluginFile);')
+          replace('src/BPSRStreamKit/Services/SetupService.cs',
+                  '                .FirstOrDefault(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase));',
+                  '                .FirstOrDefault(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase) && IsUsablePluginFile(x));')
+
+          marker = '''    private static void StopPortableObsForRepair()
+    {'''
+          helpers = '''    private static bool IsUsablePluginFile(string path)
+    {
+        try { return File.Exists(path) && new FileInfo(path).Length > 1024; }
+        catch { return false; }
+    }
+
+    private static void ResetRuntimeComponentsForRepair(string obsRoot, bool needAitum, bool needSpout)
+    {
+        static void DeleteFile(string path) { try { if (File.Exists(path)) File.Delete(path); } catch { } }
+        static void DeleteDirectory(string path) { try { if (Directory.Exists(path)) Directory.Delete(path, true); } catch { } }
+
+        DeleteFile(Path.Combine(obsRoot, "obs-plugins", "64bit", "flood-tuber.dll"));
+        DeleteDirectory(Path.Combine(obsRoot, "data", "obs-plugins", "flood-tuber"));
+        DeleteFile(Path.Combine(AppPaths.CacheDirectory, $"FloodTuber-Portable-v{FloodTuberVersion}.zip"));
+
+        if (needSpout)
+        {
+            DeleteFile(Path.Combine(obsRoot, "obs-plugins", "64bit", "win-spout.dll"));
+            DeleteDirectory(Path.Combine(obsRoot, "data", "obs-plugins", "win-spout"));
+            DeleteDirectory(Path.Combine(obsRoot, "data", "obs-plugins", "spout2"));
+            DeleteFile(Path.Combine(AppPaths.CacheDirectory, $"win-spout-{SpoutVersion}-windows-x64-portable.zip"));
+        }
+
+        if (needAitum)
+        {
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(Path.Combine(obsRoot, "obs-plugins"), "*aitum*.dll", SearchOption.AllDirectories).ToArray()) DeleteFile(file);
+                var dataRoot = Path.Combine(obsRoot, "data", "obs-plugins");
+                if (Directory.Exists(dataRoot))
+                    foreach (var dir in Directory.EnumerateDirectories(dataRoot).Where(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase)).ToArray()) DeleteDirectory(dir);
+            }
+            catch { }
+            DeleteFile(Path.Combine(AppPaths.CacheDirectory, $"aitum-stream-suite-{AitumVersion}-windows.zip"));
+        }
+    }
+
+    private async Task<string> GetOfficialGitHubAssetSha256Async(string repository, string tag, string assetName)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repository}/releases/tags/{tag}");
+        request.Headers.TryAddWithoutValidation("User-Agent", "StreamKit/2.0.3");
+        request.Headers.TryAddWithoutValidation("Accept", "application/vnd.github+json");
+        using var response = await _http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        if (!document.RootElement.TryGetProperty("assets", out var assets))
+            throw new InvalidDataException($"GitHub did not return release assets for {repository} {tag}.");
+
+        foreach (var asset in assets.EnumerateArray())
+        {
+            if (!asset.TryGetProperty("name", out var name) || !string.Equals(name.GetString(), assetName, StringComparison.Ordinal)) continue;
+            if (!asset.TryGetProperty("digest", out var digestNode)) break;
+            var digest = digestNode.GetString() ?? string.Empty;
+            if (digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) && digest.Length > 7)
+                return digest[7..];
+            break;
+        }
+        throw new InvalidDataException($"GitHub did not publish a SHA-256 digest for {assetName}. StreamKit will not install an unverified archive.");
+    }
+
+    private static void StopPortableObsForRepair()
+    {'''
+          replace('src/BPSRStreamKit/Services/SetupService.cs', marker, helpers)
+
+          # Documentation reflects the hardened behavior.
+          notices = read('THIRD_PARTY_NOTICES.md')
+          notices = notices.replace('StreamKit downloads the official portable ZIP from the FloodTuber GitHub Release and checks that the expected plugin files/layout are present before copying them into portable OBS.\n\nThe current StreamKit source does not contain a hard-coded authoritative SHA-256 for the FloodTuber v1.1.0 ZIP. The URL is version-pinned, but checksum verification remains a supply-chain hardening opportunity.',
+              'StreamKit downloads the official portable ZIP from the FloodTuber GitHub Release. Before installation it queries the official GitHub Release asset metadata and verifies the archive against GitHub\'s published SHA-256 `digest`; Repair deletes the cached archive/plugin and performs a clean verified reinstall.')
+          notices = notices.replace('Aitum is downloaded only when the **Discord + Twitch + TikTok** mode needs it. StreamKit uses the official version-pinned Windows ZIP and validates that the expected OBS plugin files are present before treating setup as complete.\n\nThe current StreamKit source does not yet contain a hard-coded authoritative SHA-256 for the Aitum 1.2.1 Windows ZIP. This is a known supply-chain hardening opportunity.',
+              'Aitum is downloaded only when the **Discord + Twitch + TikTok** mode needs it. Before installation StreamKit queries the official GitHub Release asset metadata and verifies the Windows ZIP against GitHub\'s published SHA-256 `digest`, then validates the installed plugin structure. Repair deletes the cached archive/plugin and performs a clean verified reinstall.')
+          write('THIRD_PARTY_NOTICES.md', notices)
+
+          testing = read('docs/TESTING.md')
+          if 'WebSocket automation uses the StreamKit-specific local port' not in testing:
+              testing += '''\n- WebSocket automation uses the StreamKit-specific local port and every request times out instead of hanging forever.\n- Audio hardening modifies only StreamKit scene collections and removes unused global Desktop/Aux devices.\n- Check my avatar is disabled while a share/stream is active and cannot stop the live OBS session.\n- Full VTuber auto-fit is verified in Discord Share, Twitch Live and Vertical Live.\n- Repair clean-reinstalls selected plugins and verifies FloodTuber/Aitum archives against GitHub release asset SHA-256 digests.\n- Release tags point to clean `main`, and only one release workflow owns the final ZIP.\n'''
+          write('docs/TESTING.md', testing)
+
+          # Remove this one-off patch workflow before committing the actual maintenance patch.
+          pathlib.Path('.github/workflows/maintenance-v203-patch.yml').unlink()
+
+      - name: Commit patched repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: harden final StreamKit maintenance issues [v203-applied]"
+          git push origin HEAD:maintenance/v2.0.3
