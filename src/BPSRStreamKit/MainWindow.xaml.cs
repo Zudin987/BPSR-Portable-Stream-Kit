@@ -36,7 +36,7 @@ public partial class MainWindow : Window
 
     private GameTarget? SelectedGame => GameCombo.SelectedItem as GameTarget;
     private ThemeChoice? SelectedThemeChoice => ThemeCombo.SelectedItem as ThemeChoice;
-    private static string ThemePreferenceFile => Path.Combine(AppPaths.Root, ".streamkit-theme");
+    private static string ThemePreferenceFile => System.IO.Path.Combine(AppPaths.Root, ".streamkit-theme");
 
     public MainWindow()
     {
