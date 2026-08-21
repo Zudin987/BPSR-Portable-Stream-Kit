@@ -18,10 +18,12 @@ public static class AudioPrivacyService
         var sceneRoot = Path.Combine(configRoot, "basic", "scenes");
         if (!Directory.Exists(sceneRoot)) return;
 
-        foreach (var file in Directory.EnumerateFiles(sceneRoot, "*.json", SearchOption.TopDirectoryOnly))
+        foreach (var name in new[] { "BPSR_Horizontal.json", "BPSR_TikTok_Vertical.json" })
         {
+            var file = Path.Combine(sceneRoot, name);
+            if (!File.Exists(file)) continue;
             try { HardenSceneCollection(file); }
-            catch { /* Never destroy an otherwise usable collection because of one malformed optional source. */ }
+            catch { /* Never destroy an otherwise usable StreamKit collection because of one malformed optional source. */ }
         }
     }
 
@@ -33,6 +35,7 @@ public static class AudioPrivacyService
         // OBS desktop audio is global. StreamKit never needs it because the chosen game is captured
         // directly with application/game audio. Removing these keys prevents Discord/system audio leaks.
         for (var i = 1; i <= 4; i++) root.Remove($"DesktopAudioDevice{i}");
+        for (var i = 2; i <= 4; i++) root.Remove($"AuxAudioDevice{i}");
 
         if (root["AuxAudioDevice1"] is JsonObject mic)
         {
