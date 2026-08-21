@@ -40,10 +40,26 @@ jobs:
         run: |
           Add-Type -AssemblyName System.Drawing
 
-          function Add-SakuraMark([Drawing.Graphics]$g,[Drawing.Brush]$brush,[int]$x,[int]$y,[int]$s) {
-            $half=[int][Math]::Max(1,[Math]::Round($s/2))
-            $g.FillEllipse($brush,$x,$y,$s,$s*2)
-            $g.FillEllipse($brush,$x+$s,$y+$half,$s*2,$s)
+          function Add-SakuraFlower([Drawing.Graphics]$g,[Drawing.Brush]$brush,[int]$cx,[int]$cy,[int]$s) {
+            $p=[int][Math]::Max(2,[Math]::Round($s*0.46))
+            $g.FillEllipse($brush,$cx-$p,$cy-$s,$p*2,$s)
+            $g.FillEllipse($brush,$cx-$p,$cy,$p*2,$s)
+            $g.FillEllipse($brush,$cx-$s,$cy-$p,$s,$p*2)
+            $g.FillEllipse($brush,$cx,$cy-$p,$s,$p*2)
+            $g.FillEllipse($brush,$cx-$p,$cy-$p,$p*2,$p*2)
+          }
+
+          function Add-Sparkle([Drawing.Graphics]$g,[Drawing.Pen]$pen,[int]$x,[int]$y,[int]$r) {
+            $g.DrawLine($pen,$x-$r,$y,$x+$r,$y)
+            $g.DrawLine($pen,$x,$y-$r,$x,$y+$r)
+            $d=[int][Math]::Max(2,[Math]::Round($r*0.6))
+            $g.DrawLine($pen,$x-$d,$y-$d,$x+$d,$y+$d)
+            $g.DrawLine($pen,$x-$d,$y+$d,$x+$d,$y-$d)
+          }
+
+          function Add-MedicalCross([Drawing.Graphics]$g,[Drawing.Pen]$pen,[int]$x,[int]$y,[int]$r) {
+            $g.DrawLine($pen,$x-$r,$y,$x+$r,$y)
+            $g.DrawLine($pen,$x,$y-$r,$x,$y+$r)
           }
 
           function New-SakuraFrame([string]$Path,[int]$W,[int]$H) {
@@ -52,26 +68,54 @@ jobs:
             $g=[Drawing.Graphics]::FromImage($bmp)
             $g.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
             $g.Clear([Drawing.Color]::Transparent)
+
             $pink=[Drawing.Color]::FromArgb(238,231,116,176)
-            $violet=[Drawing.Color]::FromArgb(155,177,124,241)
-            $soft=[Drawing.Color]::FromArgb(190,255,199,225)
+            $violet=[Drawing.Color]::FromArgb(180,177,124,241)
+            $soft=[Drawing.Color]::FromArgb(205,255,199,225)
+            $faint=[Drawing.Color]::FromArgb(130,255,222,238)
             $p1=[Drawing.Pen]::new($pink,2)
             $p2=[Drawing.Pen]::new($violet,1)
+            $p3=[Drawing.Pen]::new($faint,1)
+            $spark=[Drawing.Pen]::new($soft,1)
             $b=[Drawing.SolidBrush]::new($soft)
+            $b2=[Drawing.SolidBrush]::new($faint)
+
             $m=1; $i=5
             $g.DrawRectangle($p1,$m,$m,$W-(2*$m)-1,$H-(2*$m)-1)
             $g.DrawRectangle($p2,$i,$i,$W-(2*$i)-1,$H-(2*$i)-1)
-            $s=[int][Math]::Max(7,[Math]::Round([Math]::Min($W,$H)*0.008))
-            Add-SakuraMark $g $b ($i+16) ($i+16) $s
-            Add-SakuraMark $g $b ($W-$i-28) ($i+16) $s
-            Add-SakuraMark $g $b ($i+16) ($H-$i-28) $s
-            Add-SakuraMark $g $b ($W-$i-28) ($H-$i-28) $s
-            $spark=[Drawing.Pen]::new($soft,1)
-            $cx=[int]($W*0.5)
-            $g.DrawLine($spark,$cx-10,$i+5,$cx+10,$i+5)
-            $g.DrawLine($spark,$cx,$i,$cx,$i+10)
+
+            $s=[int][Math]::Max(8,[Math]::Round([Math]::Min($W,$H)*0.010))
+            Add-SakuraFlower $g $b ($i+28) ($i+28) $s
+            Add-SakuraFlower $g $b ($W-$i-29) ($i+28) $s
+            Add-SakuraFlower $g $b ($i+28) ($H-$i-29) $s
+            Add-SakuraFlower $g $b ($W-$i-29) ($H-$i-29) $s
+
+            $branch=[int][Math]::Max(52,[Math]::Round([Math]::Min($W,$H)*0.070))
+            $g.DrawArc($p3,$i+12,$i+10,$branch,$branch,180,90)
+            $g.DrawArc($p3,$W-$i-$branch-14,$i+10,$branch,$branch,270,90)
+            $g.DrawArc($p3,$i+12,$H-$i-$branch-12,$branch,$branch,90,90)
+            $g.DrawArc($p3,$W-$i-$branch-14,$H-$i-$branch-12,$branch,$branch,0,90)
+
+            $mini=[int][Math]::Max(4,[Math]::Round($s*0.55))
+            Add-SakuraFlower $g $b2 ($i+$branch-3) ($i+18) $mini
+            Add-SakuraFlower $g $b2 ($W-$i-$branch+2) ($i+18) $mini
+            Add-SakuraFlower $g $b2 ($i+$branch-3) ($H-$i-19) $mini
+            Add-SakuraFlower $g $b2 ($W-$i-$branch+2) ($H-$i-19) $mini
+
+            $cx=[int]($W*0.5); $cy=[int]($H*0.5)
+            Add-Sparkle $g $spark $cx ($i+8) 9
+            Add-Sparkle $g $spark $cx ($H-$i-9) 9
+            Add-Sparkle $g $spark ($i+8) $cy 7
+            Add-Sparkle $g $spark ($W-$i-9) $cy 7
+
+            $petal=[int][Math]::Max(5,[Math]::Round($s*0.62))
+            $g.FillEllipse($b2,[int]($W*0.24),$i+13,$petal,$petal*2)
+            $g.FillEllipse($b2,[int]($W*0.76),$H-$i-13-$petal*2,$petal,$petal*2)
+            $g.FillEllipse($b2,$i+13,[int]($H*0.30),$petal*2,$petal)
+            $g.FillEllipse($b2,$W-$i-13-$petal*2,[int]($H*0.70),$petal*2,$petal)
+
             $bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Png)
-            $spark.Dispose();$b.Dispose();$p1.Dispose();$p2.Dispose();$g.Dispose();$bmp.Dispose()
+            $b2.Dispose();$b.Dispose();$spark.Dispose();$p3.Dispose();$p2.Dispose();$p1.Dispose();$g.Dispose();$bmp.Dispose()
           }
 
           function New-MedicalFrame([string]$Path,[int]$W,[int]$H) {
@@ -80,42 +124,74 @@ jobs:
             $g=[Drawing.Graphics]::FromImage($bmp)
             $g.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
             $g.Clear([Drawing.Color]::Transparent)
+
             $cyan=[Drawing.Color]::FromArgb(238,31,211,235)
             $white=[Drawing.Color]::FromArgb(220,238,252,255)
-            $soft=[Drawing.Color]::FromArgb(170,111,231,242)
+            $soft=[Drawing.Color]::FromArgb(175,111,231,242)
+            $faint=[Drawing.Color]::FromArgb(115,130,230,242)
             $p1=[Drawing.Pen]::new($cyan,2)
             $p2=[Drawing.Pen]::new($white,1)
             $p3=[Drawing.Pen]::new($soft,2)
+            $p4=[Drawing.Pen]::new($faint,1)
             $m=1; $i=5
             $g.DrawRectangle($p1,$m,$m,$W-(2*$m)-1,$H-(2*$m)-1)
             $g.DrawRectangle($p2,$i,$i,$W-(2*$i)-1,$H-(2*$i)-1)
-            $r=[int][Math]::Max(8,[Math]::Round([Math]::Min($W,$H)*0.009))
-            $x=$i+22; $y=$i+22
-            $g.DrawLine($p3,$x-$r,$y,$x+$r,$y); $g.DrawLine($p3,$x,$y-$r,$x,$y+$r)
-            $x=$W-$i-22; $y=$H-$i-22
-            $g.DrawLine($p3,$x-$r,$y,$x+$r,$y); $g.DrawLine($p3,$x,$y-$r,$x,$y+$r)
-            $cy=$i+8; $cx=[int]($W*0.50); $step=[int][Math]::Max(8,[Math]::Round([Math]::Min($W,$H)*0.008))
-            $pts=[Drawing.Point[]]@(
-              [Drawing.Point]::new($cx-(4*$step),$cy),
-              [Drawing.Point]::new($cx-(2*$step),$cy),
-              [Drawing.Point]::new($cx-$step,$cy-$step),
-              [Drawing.Point]::new($cx,$cy+$step),
-              [Drawing.Point]::new($cx+$step,$cy-(2*$step)),
-              [Drawing.Point]::new($cx+(2*$step),$cy),
-              [Drawing.Point]::new($cx+(4*$step),$cy)
+
+            $r=[int][Math]::Max(10,[Math]::Round([Math]::Min($W,$H)*0.011))
+            Add-MedicalCross $g $p3 ($i+26) ($i+26) $r
+            Add-MedicalCross $g $p3 ($W-$i-27) ($i+26) $r
+            Add-MedicalCross $g $p3 ($i+26) ($H-$i-27) $r
+            Add-MedicalCross $g $p3 ($W-$i-27) ($H-$i-27) $r
+
+            $cx=[int]($W*0.50); $step=[int][Math]::Max(9,[Math]::Round([Math]::Min($W,$H)*0.009)); $top=$i+10
+            $ecg=[Drawing.Point[]]@(
+              [Drawing.Point]::new($cx-(5*$step),$top),
+              [Drawing.Point]::new($cx-(3*$step),$top),
+              [Drawing.Point]::new($cx-(2*$step),$top-$step),
+              [Drawing.Point]::new($cx-$step,$top+$step),
+              [Drawing.Point]::new($cx,$top-(2*$step)),
+              [Drawing.Point]::new($cx+$step,$top+$step),
+              [Drawing.Point]::new($cx+(2*$step),$top),
+              [Drawing.Point]::new($cx+(5*$step),$top)
             )
-            $g.DrawLines($p3,$pts)
+            $g.DrawLines($p3,$ecg)
+            $bottom=$H-$i-11
+            $ecg2=[Drawing.Point[]]@(
+              [Drawing.Point]::new($cx-(5*$step),$bottom),
+              [Drawing.Point]::new($cx-(3*$step),$bottom),
+              [Drawing.Point]::new($cx-(2*$step),$bottom+$step),
+              [Drawing.Point]::new($cx-$step,$bottom-$step),
+              [Drawing.Point]::new($cx,$bottom+(2*$step)),
+              [Drawing.Point]::new($cx+$step,$bottom-$step),
+              [Drawing.Point]::new($cx+(2*$step),$bottom),
+              [Drawing.Point]::new($cx+(5*$step),$bottom)
+            )
+            $g.DrawLines($p4,$ecg2)
+
+            $pillW=[int][Math]::Max(18,[Math]::Round($r*1.8)); $pillH=[int][Math]::Max(8,[Math]::Round($r*0.75))
+            $g.DrawEllipse($p4,$i+15,[int]($H*0.32),$pillW,$pillH)
+            $g.DrawLine($p4,$i+15+[int]($pillW/2),[int]($H*0.32),$i+15+[int]($pillW/2),[int]($H*0.32)+$pillH)
+            $g.DrawEllipse($p4,$W-$i-15-$pillW,[int]($H*0.68),$pillW,$pillH)
+            $g.DrawLine($p4,$W-$i-15-[int]($pillW/2),[int]($H*0.68),$W-$i-15-[int]($pillW/2),[int]($H*0.68)+$pillH)
+
+            $dotR=[int][Math]::Max(3,[Math]::Round($r*0.28))
+            foreach($f in @(0.20,0.40,0.60,0.80)) {
+              $x=[int]($W*$f)
+              $g.DrawEllipse($p4,$x-$dotR,$i+14,$dotR*2,$dotR*2)
+              $g.DrawEllipse($p4,$x-$dotR,$H-$i-14-($dotR*2),$dotR*2,$dotR*2)
+            }
+
             $bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Png)
-            $p1.Dispose();$p2.Dispose();$p3.Dispose();$g.Dispose();$bmp.Dispose()
+            $p4.Dispose();$p3.Dispose();$p2.Dispose();$p1.Dispose();$g.Dispose();$bmp.Dispose()
           }
 
-          function New-ThemeScreen([string]$Path,[string]$Avatar,[int]$W,[int]$H,[string]$Title,[string]$Theme) {
+          function New-ThemeScreen([string]$Path,[int]$W,[int]$H,[string]$Title,[string]$Theme) {
             New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
             $bmp=[Drawing.Bitmap]::new($W,$H,[Drawing.Imaging.PixelFormat]::Format24bppRgb)
             $g=[Drawing.Graphics]::FromImage($bmp)
             $g.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
-            $g.InterpolationMode=[Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
             $vertical=$H -gt $W
+
             if($Theme -eq 'sakura') {
               $bg=[Drawing.Color]::FromArgb(20,12,28)
               $accent=[Drawing.Color]::FromArgb(232,122,177)
@@ -128,66 +204,61 @@ jobs:
               $white=[Drawing.Color]::FromArgb(238,252,255)
             }
             $g.Clear($bg)
+
             $m=[int][Math]::Max(10,[Math]::Round([Math]::Min($W,$H)*0.012))
             $p=[Drawing.Pen]::new($accent,2)
             $p2=[Drawing.Pen]::new($accent2,1)
             $g.DrawRectangle($p,$m,$m,$W-(2*$m)-1,$H-(2*$m)-1)
             $g.DrawRectangle($p2,$m+7,$m+7,$W-(2*($m+7))-1,$H-(2*($m+7))-1)
-            if($vertical) {
-              $ts=[single][Math]::Max(72,$W*0.095)
-              $ty=[single]($H*0.18)
-              $ax=[int]($W*0.18);$ay=[int]($H*0.40);$aw=[int]($W*0.64);$ah=[int]($H*0.50)
-            } else {
-              $ts=[single][Math]::Max(76,$H*0.095)
-              $ty=[single]($H*0.24)
-              $ax=[int]($W*0.62);$ay=[int]($H*0.12);$aw=[int]($W*0.30);$ah=[int]($H*0.80)
-            }
+
+            if($vertical) { $ts=[single][Math]::Max(48,$W*0.060) }
+            else { $ts=[single][Math]::Max(50,$H*0.060) }
             $tf=[Drawing.Font]::new('Segoe UI',$ts,[Drawing.FontStyle]::Bold)
             $wb=[Drawing.SolidBrush]::new($white)
             $size=$g.MeasureString($Title,$tf)
             $tx=[single](($W-$size.Width)/2)
+            $ty=[single](($H-$size.Height)/2)
             $g.DrawString($Title,$tf,$wb,$tx,$ty)
-            $img=[Drawing.Image]::FromFile($Avatar)
-            $ratio=[Math]::Min($aw/$img.Width,$ah/$img.Height)
-            $dw=[int]($img.Width*$ratio);$dh=[int]($img.Height*$ratio)
-            $g.DrawImage($img,$ax+[int](($aw-$dw)/2),$ay+[int](($ah-$dh)/2),$dw,$dh)
+
             if($Theme -eq 'sakura') {
-              $b=[Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(190,255,192,222))
+              $b=[Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(175,255,192,222))
               $s=[int][Math]::Max(10,[Math]::Round([Math]::Min($W,$H)*0.012))
-              Add-SakuraMark $g $b ($m+30) ($m+30) $s
-              Add-SakuraMark $g $b ($W-$m-55) ($H-$m-70) $s
-              Add-SakuraMark $g $b ([int]($W*0.16)) ([int]($H*0.72)) $s
-              $b.Dispose()
+              Add-SakuraFlower $g $b ($m+34) ($m+34) $s
+              Add-SakuraFlower $g $b ($W-$m-35) ($H-$m-35) $s
+              $spark=[Drawing.Pen]::new([Drawing.Color]::FromArgb(160,255,214,232),1)
+              Add-Sparkle $g $spark ([int]($W*0.18)) ([int]($H*0.25)) 8
+              Add-Sparkle $g $spark ([int]($W*0.82)) ([int]($H*0.75)) 8
+              $spark.Dispose();$b.Dispose()
             } else {
-              $med=[Drawing.Pen]::new($accent,3)
+              $med=[Drawing.Pen]::new($accent,2)
               $r2=[int][Math]::Max(12,[Math]::Round([Math]::Min($W,$H)*0.014))
-              $x=$m+45;$y=$H-$m-55
-              $g.DrawLine($med,$x-$r2,$y,$x+$r2,$y)
-              $g.DrawLine($med,$x,$y-$r2,$x,$y+$r2)
+              Add-MedicalCross $g $med ($m+40) ($H-$m-42) $r2
+              Add-MedicalCross $g $med ($W-$m-41) ($m+40) $r2
               $med.Dispose()
             }
+
             if([IO.Path]::GetExtension($Path).ToLowerInvariant() -eq '.jpg') {
               $bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Jpeg)
             } else {
               $bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Png)
             }
-            $img.Dispose();$tf.Dispose();$wb.Dispose();$p.Dispose();$p2.Dispose();$g.Dispose();$bmp.Dispose()
+            $tf.Dispose();$wb.Dispose();$p.Dispose();$p2.Dispose();$g.Dispose();$bmp.Dispose()
           }
 
           New-SakuraFrame 'publish/Assets/Frames/01_Minimal_Thin_1080p.png' 1920 1080
           New-SakuraFrame 'publish/Assets/Frames/05_TikTok_Minimal_1080x1920.png' 1080 1920
-          New-ThemeScreen 'publish/Assets/Screens/Starting_1080p.png' 'publish/Assets/MyAvatar/idle.png' 1920 1080 'STARTING SOON' 'sakura'
-          New-ThemeScreen 'publish/Assets/Screens/BRB_1080p.png' 'publish/Assets/MyAvatar/action.png' 1920 1080 'BE RIGHT BACK' 'sakura'
-          New-ThemeScreen 'publish/Assets/Screens/Starting_TikTok_1080x1920.png' 'publish/Assets/MyAvatar/idle.png' 1080 1920 'STARTING SOON' 'sakura'
-          New-ThemeScreen 'publish/Assets/Screens/BRB_TikTok_1080x1920.png' 'publish/Assets/MyAvatar/action.png' 1080 1920 'BE RIGHT BACK' 'sakura'
+          New-ThemeScreen 'publish/Assets/Screens/Starting_1080p.png' 1920 1080 'STARTING SOON' 'sakura'
+          New-ThemeScreen 'publish/Assets/Screens/BRB_1080p.png' 1920 1080 'BE RIGHT BACK' 'sakura'
+          New-ThemeScreen 'publish/Assets/Screens/Starting_TikTok_1080x1920.png' 1080 1920 'STARTING SOON' 'sakura'
+          New-ThemeScreen 'publish/Assets/Screens/BRB_TikTok_1080x1920.png' 1080 1920 'BE RIGHT BACK' 'sakura'
 
           $theme='publish/Assets/Themes/Profile_B_Doctor'
           New-MedicalFrame "$theme/Frames/Discord_1080p.png" 1920 1080
           New-MedicalFrame "$theme/Frames/TikTok_1080x1920.png" 1080 1920
-          New-ThemeScreen "$theme/Screens/Starting_1080p.jpg" "$theme/Avatar/idle.png" 1920 1080 'STARTING SOON' 'doctor'
-          New-ThemeScreen "$theme/Screens/BRB_1080p.jpg" "$theme/Avatar/action.png" 1920 1080 'BE RIGHT BACK' 'doctor'
-          New-ThemeScreen "$theme/Screens/Starting_TikTok_1080x1920.jpg" "$theme/Avatar/idle.png" 1080 1920 'STARTING SOON' 'doctor'
-          New-ThemeScreen "$theme/Screens/BRB_TikTok_1080x1920.jpg" "$theme/Avatar/action.png" 1080 1920 'BE RIGHT BACK' 'doctor'
+          New-ThemeScreen "$theme/Screens/Starting_1080p.jpg" 1920 1080 'STARTING SOON' 'doctor'
+          New-ThemeScreen "$theme/Screens/BRB_1080p.jpg" 1920 1080 'BE RIGHT BACK' 'doctor'
+          New-ThemeScreen "$theme/Screens/Starting_TikTok_1080x1920.jpg" 1080 1920 'STARTING SOON' 'doctor'
+          New-ThemeScreen "$theme/Screens/BRB_TikTok_1080x1920.jpg" 1080 1920 'BE RIGHT BACK' 'doctor'
 
       - name: Verify and package
         shell: pwsh
@@ -214,7 +285,7 @@ jobs:
           )
           foreach($f in $required){if(-not(Test-Path $f)){throw "Missing release file: $f"}}
           @"
-          StreamKit v0.3.4
+          StreamKit v0.3.5
 
           1. Extract the whole ZIP.
           2. Run BPSRStreamKit.exe.
@@ -224,7 +295,7 @@ jobs:
           Discord: share the OBS Projector/preview window in Discord after StreamKit opens it.
           Twitch/TikTok: connect your local account/stream method in portable OBS, then start streaming from OBS.
 
-          StreamKit is a generic game-streaming tool. Historical BPSR names remain only in some internal compatibility paths.
+          v0.3.5 removes avatars from Starting Soon/BRB screens, uses smaller centered titles, and adds richer themed frame decoration.
           "@ | Set-Content publish/START_HERE.txt -Encoding UTF8
           Compress-Archive publish/* StreamKit-win-x64.zip -Force
           $check=Join-Path $env:RUNNER_TEMP 'streamkit-check';if(Test-Path $check){Remove-Item $check -Recurse -Force}
