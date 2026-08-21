@@ -255,7 +255,7 @@
                 <Grid Margin="4,15,4,0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock x:Name="FooterStatus" Text="Ready when you are" FontSize="10" Foreground="#737C8E"/>
-                    <TextBlock Grid.Column="1" Text="v2.0.2" FontSize="10" Foreground="#737C8E"/>
+                    <TextBlock Grid.Column="1" Text="v2.0.3" FontSize="10" Foreground="#737C8E"/>
                 </Grid>
             </StackPanel>
         </ScrollViewer>
