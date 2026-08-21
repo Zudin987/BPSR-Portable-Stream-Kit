@@ -1,15 +1,15 @@
 name: Apply v2.0.2 avatar hotfix
 
 on:
-  push:
-    branches: ['hotfix/v2.0.2']
+  pull_request_target:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.head.ref == 'hotfix/v2.0.2' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
