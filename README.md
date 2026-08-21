@@ -1,46 +1,71 @@
 # StreamKit — Portable Game + VTuber Streaming
 
-StreamKit is a portable Windows launcher for getting a game, a VTuber avatar, Discord camera output, Twitch and TikTok into one simple workflow.
+StreamKit is a portable Windows launcher for getting a game, a VTuber avatar, Discord screen share, Twitch and TikTok into one simple workflow.
 
 > **Quick start:** Extract the whole release ZIP, run `BPSRStreamKit.exe`, choose a stream mode, avatar, frame theme and running game, then press the main button.
 
 ## Stream modes
 
-### Discord Only
+### Discord Share
 
-This is the fastest mode.
+This is the fastest mode and is designed to avoid double microphone audio.
 
 1. Open the game.
 2. Run StreamKit.
-3. Choose **Discord Only**.
+3. Choose **Discord Share**.
 4. Leave **Full VTuber** selected if you want VTube Studio, or choose PNG Avatar / None.
-5. Press **Open Discord VTuber**.
-6. StreamKit opens VTube Studio through Steam when needed, prepares portable OBS and starts **OBS Virtual Camera**.
-7. In Discord choose **OBS Virtual Camera** as your camera.
-8. Keep your normal microphone selected in Discord.
+5. Press **Open Discord Share**.
+6. StreamKit opens VTube Studio when needed, prepares portable OBS and automatically opens **Windowed Projector (Program)**.
+7. In Discord choose **Share Your Screen** and select the OBS Windowed Projector window with sound.
+8. Keep your normal Discord microphone selected.
 
-OBS Virtual Camera carries video, not the game audio. If you need Discord viewers to hear game audio too, use Discord screen share/audio separately.
+Discord share audio is intentionally **game audio only**. StreamKit mutes the OBS microphone in Discord-only mode so your friends do not hear your voice twice. Your normal Discord microphone remains the voice path.
 
 ### Discord + Twitch + TikTok
 
 This mode uses one portable OBS instance with separate horizontal and vertical outputs:
 
-- **Discord:** OBS Virtual Camera
-- **Twitch:** main 1920×1080 horizontal canvas
-- **TikTok:** Aitum 1080×1920 vertical canvas
+- **Discord:** clean Windowed Projector (Program); OBS Virtual Camera also remains available as a fallback.
+- **Twitch:** main 1920×1080 horizontal canvas.
+- **TikTok:** Aitum 1080×1920 vertical canvas.
 
 On first use StreamKit installs the pinned Aitum Stream Suite plugin, creates the vertical canvas and prepares matching horizontal/vertical layouts.
 
 There is one unavoidable account step the first time:
 
-1. In normal OBS **Settings → Stream**, connect Twitch.
+1. In portable OBS **Settings → Stream**, connect Twitch.
 2. In **Aitum Stream Suite → Settings → Outputs**, add a TikTok stream output.
 3. Choose the **Vertical** canvas and enter the TikTok server/key provided to your account.
 4. Close OBS when finished.
 
-After that, **Start All Platforms** can start Twitch + TikTok together while OBS Virtual Camera supplies Discord.
+After that, **Start All Platforms** starts Twitch + TikTok together and opens the Discord share projector.
 
 TikTok requires LIVE/stream-key access on the TikTok account. StreamKit cannot grant that access.
+
+## Private audio routing
+
+StreamKit deliberately avoids global desktop audio.
+
+- The selected game is captured directly with its own application/game audio.
+- Twitch/TikTok receive **selected-game audio + Mic/Aux only**.
+- Desktop/system loopback audio is disabled, so Discord friends, notification sounds and unrelated applications are not intentionally sent to Twitch/TikTok.
+- The OBS microphone gets the built-in **RNNoise** noise-suppression filter automatically.
+- In Discord-only mode, the OBS mic is muted and not monitored; Discord uses your normal Discord mic instead.
+- In All Platforms mode, the OBS mic goes to Twitch/TikTok but is not monitored into the Discord projector audio path.
+
+The Discord projector obtains game sound from OBS's selected-game monitoring path. No default Display Capture or Desktop Audio source is required.
+
+## Stream controls
+
+Once a stream/share is prepared, StreamKit exposes simple controls so OBS can stay in the background:
+
+- **Starting Soon** — switches the horizontal scene and TikTok vertical scene together.
+- **Live** — returns to the game + VTuber layout.
+- **BRB** — switches both layouts to the BRB screen.
+- **Mute Mic / Unmute Mic** — controls the OBS mic used by Twitch/TikTok. In Discord-only mode this control is locked because the OBS mic intentionally stays out of the Discord share.
+- **Stop Stream** — stops configured streams/Virtual Camera and closes StreamKit's portable OBS while leaving VTube Studio open.
+
+The main button becomes **Reopen Discord Share** while active, so the clean projector can be reopened without rebuilding the stream.
 
 ## Avatar modes
 
@@ -55,10 +80,12 @@ VTube Studio only needs a small one-time setup:
 1. Choose your Live2D model and webcam/tracker in VTube Studio.
 2. Turn on **Spout2 output** in VTube Studio.
 3. Select **Color Picker Background**.
-4. Use transparent black and enable **Transparent in capture**.
+4. Enable **Transparent in capture**.
 5. Leave the Spout sender name as `VTubeStudioSpout` for the normal single-instance setup.
 
-After that, StreamKit handles the OBS side automatically. Webcam face tracking, head motion, blinking, mouth movement, expressions and Live2D physics remain handled by VTube Studio. The webcam image itself is not added to the stream scene.
+StreamKit no longer trusts the instruction screen alone: after OBS opens it takes a small source screenshot and checks that VTube Studio is actually producing a useful transparent Spout frame. The one-time setup is only marked complete after that check passes.
+
+Webcam face tracking, head motion, blinking, mouth movement, expressions and Live2D physics remain handled by VTube Studio. The webcam image itself is not added to the stream scene.
 
 ### PNG Avatar
 
@@ -81,15 +108,18 @@ The frame theme is independent from the avatar mode. A full VTube Studio model c
 StreamKit handles the repetitive pieces for you:
 
 - portable OBS setup,
-- Spout2 transparent VTube Studio capture,
+- Spout2 transparent VTube Studio capture and runtime verification,
 - FloodTuber fallback setup,
 - Aitum Stream Suite setup for multistream mode,
 - local authenticated OBS WebSocket automation,
-- game-window capture,
+- selected-game video + audio capture,
+- private audio hardening and RNNoise mic suppression,
 - horizontal Twitch/Discord scene,
-- vertical TikTok scene,
-- OBS Virtual Camera,
+- vertical TikTok scenes including Starting Soon / Live / BRB,
+- automatic Discord Program projector,
+- optional OBS Virtual Camera in All Platforms mode,
 - starting all configured Twitch/TikTok stream outputs together,
+- StreamKit scene/mic controls,
 - remembering your stream mode, avatar choice, frame theme and last game.
 
 VTube Studio, Twitch and TikTok still require their own legitimate account/model access. StreamKit does not bypass platform requirements.
@@ -141,7 +171,7 @@ Advanced controls provide:
 - **VTube Studio** — open it through Steam,
 - **Open OBS** — inspect/edit the portable OBS setup,
 - **Open folder** — open the StreamKit folder,
-- **Repair** — restore missing runtime/plugin/layout files while preserving existing local account/output settings where possible.
+- **Repair** — restore missing runtime/plugin/layout files and re-apply private audio hardening while preserving existing local account/output settings where possible.
 
 ## Building from source
 
