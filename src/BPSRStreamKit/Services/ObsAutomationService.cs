@@ -3,6 +3,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using BPSRStreamKit.Infrastructure;
 
 namespace BPSRStreamKit.Services;
@@ -10,6 +12,10 @@ namespace BPSRStreamKit.Services;
 public sealed class ObsAutomationService
 {
     public const int Port = 4455;
+    private const string MicInputName = "Mic/Aux";
+    private const string GameInputName = "Selected Game + Audio";
+    private const string VTubeInputName = "VTube Studio Avatar";
+    private const string NoiseFilterName = "StreamKit RNNoise";
     private static string KeyFile => Path.Combine(AppPaths.Root, "user-data", "obs-websocket.key");
 
     public static string GetOrCreatePassword()
@@ -77,6 +83,204 @@ public sealed class ObsAutomationService
     public async Task StopVirtualCameraAsync()
     {
         try { await WithSessionAsync(s => s.RequestAsync("StopVirtualCam")); } catch { }
+    }
+
+    public async Task OpenProgramProjectorAsync()
+    {
+        await WithSessionAsync(s => s.RequestAsync("OpenVideoMixProjector", new JsonObject
+        {
+            ["videoMixType"] = "OBS_WEBSOCKET_VIDEO_MIX_TYPE_PROGRAM",
+            ["monitorIndex"] = -1
+        }));
+    }
+
+    public async Task SetCurrentSceneAsync(string sceneName)
+    {
+        await WithSessionAsync(s => s.RequestAsync("SetCurrentProgramScene", new JsonObject { ["sceneName"] = sceneName }));
+    }
+
+    public async Task SwitchScenesAsync(string horizontalScene, string? verticalScene = null)
+    {
+        await SetCurrentSceneAsync(horizontalScene);
+        if (!string.IsNullOrWhiteSpace(verticalScene))
+            await SwitchVerticalSceneAsync(verticalScene);
+    }
+
+    public async Task SetMicMutedAsync(bool muted)
+    {
+        await WithSessionAsync(s => s.RequestAsync("SetInputMute", new JsonObject
+        {
+            ["inputName"] = MicInputName,
+            ["inputMuted"] = muted
+        }));
+    }
+
+    public async Task<bool> GetMicMutedAsync()
+    {
+        var response = await WithSessionAsync(s => s.RequestAsync("GetInputMute", new JsonObject { ["inputName"] = MicInputName }));
+        return response?["inputMuted"]?.GetValue<bool>() ?? false;
+    }
+
+    public async Task<bool> ToggleMicMutedAsync()
+    {
+        await WithSessionAsync(s => s.RequestAsync("ToggleInputMute", new JsonObject { ["inputName"] = MicInputName }));
+        return await GetMicMutedAsync();
+    }
+
+    public async Task EnsureMicNoiseSuppressionAsync()
+    {
+        await WithSessionAsync(async s =>
+        {
+            var list = await s.RequestAsync("GetSourceFilterList", new JsonObject { ["sourceName"] = MicInputName });
+            var exists = list?["filters"]?.AsArray()?.OfType<JsonObject>()
+                .Any(x => string.Equals(x["filterName"]?.GetValue<string>(), NoiseFilterName, StringComparison.Ordinal)) == true;
+            var filterSettings = new JsonObject { ["method"] = "rnnoise" };
+
+            if (!exists)
+            {
+                await s.RequestAsync("CreateSourceFilter", new JsonObject
+                {
+                    ["sourceName"] = MicInputName,
+                    ["filterName"] = NoiseFilterName,
+                    ["filterKind"] = "noise_suppress_filter",
+                    ["filterSettings"] = filterSettings
+                });
+            }
+            else
+            {
+                await s.RequestAsync("SetSourceFilterSettings", new JsonObject
+                {
+                    ["sourceName"] = MicInputName,
+                    ["filterName"] = NoiseFilterName,
+                    ["filterSettings"] = filterSettings,
+                    ["overlay"] = true
+                });
+                await s.RequestAsync("SetSourceFilterEnabled", new JsonObject
+                {
+                    ["sourceName"] = MicInputName,
+                    ["filterName"] = NoiseFilterName,
+                    ["filterEnabled"] = true
+                });
+            }
+            return true;
+        });
+    }
+
+    public async Task ConfigureDiscordShareAudioAsync(bool alsoStreamingPlatforms)
+    {
+        await EnsureMicNoiseSuppressionAsync();
+        await SetMicMutedAsync(!alsoStreamingPlatforms);
+        await WithSessionAsync(async s =>
+        {
+            await s.RequestAsync("SetInputAudioMonitorType", new JsonObject
+            {
+                ["inputName"] = MicInputName,
+                ["monitorType"] = "OBS_MONITORING_TYPE_NONE"
+            });
+            await s.RequestAsync("SetInputAudioMonitorType", new JsonObject
+            {
+                ["inputName"] = GameInputName,
+                ["monitorType"] = alsoStreamingPlatforms
+                    ? "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT"
+                    : "OBS_MONITORING_TYPE_MONITOR_ONLY"
+            });
+            return true;
+        });
+    }
+
+    public async Task RestoreNormalAudioMonitoringAsync()
+    {
+        try
+        {
+            await WithSessionAsync(async s =>
+            {
+                await s.RequestAsync("SetInputAudioMonitorType", new JsonObject
+                {
+                    ["inputName"] = MicInputName,
+                    ["monitorType"] = "OBS_MONITORING_TYPE_NONE"
+                });
+                await s.RequestAsync("SetInputAudioMonitorType", new JsonObject
+                {
+                    ["inputName"] = GameInputName,
+                    ["monitorType"] = "OBS_MONITORING_TYPE_NONE"
+                });
+                return true;
+            });
+        }
+        catch { }
+    }
+
+    public async Task<bool> WaitForVTubeStudioVideoAsync(TimeSpan? timeout = null)
+    {
+        var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(20));
+        while (DateTime.UtcNow < until)
+        {
+            try
+            {
+                if (await HasTransparentVTubeFrameAsync()) return true;
+            }
+            catch { }
+            await Task.Delay(700);
+        }
+        return false;
+    }
+
+    private async Task<bool> HasTransparentVTubeFrameAsync()
+    {
+        var response = await WithSessionAsync(s => s.RequestAsync("GetSourceScreenshot", new JsonObject
+        {
+            ["sourceName"] = VTubeInputName,
+            ["imageFormat"] = "png",
+            ["imageWidth"] = 160,
+            ["imageHeight"] = 160
+        }));
+        var imageData = response?["imageData"]?.GetValue<string>();
+        return !string.IsNullOrWhiteSpace(imageData) && HasUsefulTransparentPixels(imageData);
+    }
+
+    private static bool HasUsefulTransparentPixels(string dataUri)
+    {
+        try
+        {
+            var comma = dataUri.IndexOf(',');
+            var base64 = comma >= 0 ? dataUri[(comma + 1)..] : dataUri;
+            var bytes = Convert.FromBase64String(base64);
+            using var stream = new MemoryStream(bytes);
+            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            if (decoder.Frames.Count == 0) return false;
+
+            var bitmap = new FormatConvertedBitmap(decoder.Frames[0], PixelFormats.Bgra32, null, 0);
+            var width = bitmap.PixelWidth;
+            var height = bitmap.PixelHeight;
+            if (width <= 0 || height <= 0) return false;
+
+            var stride = width * 4;
+            var pixels = new byte[stride * height];
+            bitmap.CopyPixels(pixels, stride, 0);
+
+            var visible = 0;
+            var cornerOpaque = 0;
+            var cornerSamples = 0;
+            var edge = Math.Max(2, Math.Min(width, height) / 10);
+            for (var y = 0; y < height; y++)
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var alpha = pixels[(y * stride) + (x * 4) + 3];
+                    if (alpha > 12) visible++;
+                    var corner = (x < edge || x >= width - edge) && (y < edge || y >= height - edge);
+                    if (!corner) continue;
+                    cornerSamples++;
+                    if (alpha > 40) cornerOpaque++;
+                }
+            }
+
+            var total = width * height;
+            var visibleRatio = (double)visible / total;
+            var cornerRatio = cornerSamples == 0 ? 0 : (double)cornerOpaque / cornerSamples;
+            return visibleRatio > 0.002 && visibleRatio < 0.90 && cornerRatio < 0.35;
+        }
+        catch { return false; }
     }
 
     public async Task StartAllStreamsAsync()
