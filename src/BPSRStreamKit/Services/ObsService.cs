@@ -23,6 +23,7 @@ public sealed class ObsService
 
         if (mode != StreamMode.PlainObs)
         {
+            EnsureCleanRestart();
             var selected = game ?? throw new InvalidOperationException("Choose a running game first.");
             if (!selected.IsRunning)
                 throw new InvalidOperationException($"{selected.DisplayName} is not running. Open the game and refresh the game list first.");
@@ -64,6 +65,7 @@ public sealed class ObsService
     public void LaunchAitumBootstrap(GameTarget game, StreamTheme theme, AvatarMode avatarMode, VTubeCaptureTarget? vTubeTarget)
     {
         var obsExe = AppPaths.FindObsExe() ?? throw new FileNotFoundException("Portable OBS is not ready yet.");
+        EnsureCleanRestart();
         ApplyTheme(theme, avatarMode, vTubeTarget);
         PrepareGenericCapture(game, vertical: false);
 
@@ -87,6 +89,7 @@ public sealed class ObsService
         if (string.IsNullOrWhiteSpace(verticalCanvasUuid))
             throw new ArgumentException("Vertical canvas UUID is required.", nameof(verticalCanvasUuid));
 
+        EnsureCleanRestart();
         ApplyTheme(theme, avatarMode, vTubeTarget);
         PrepareGenericCapture(game, vertical: false);
         PrepareGenericCapture(game, vertical: true);
@@ -119,6 +122,11 @@ public sealed class ObsService
             finally { process.Dispose(); }
         }
         return stoppedAny;
+    }
+
+    private void EnsureCleanRestart()
+    {
+        if (Stop()) Thread.Sleep(1100);
     }
 
     private static void AddWebSocketArguments(ProcessStartInfo info)
