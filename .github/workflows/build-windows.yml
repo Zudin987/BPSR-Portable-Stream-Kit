@@ -77,13 +77,11 @@ jobs:
 
             $corner = [int][Math]::Round($short * 0.07)
             $m = $margin
-            # Minimal corner accents.
             $g.DrawLine($p3, $m, $m + $corner, $m + $corner, $m)
             $g.DrawLine($p3, $Width - $m, $m + $corner, $Width - $m - $corner, $m)
             $g.DrawLine($p3, $m, $Height - $m - $corner, $m + $corner, $Height - $m)
             $g.DrawLine($p3, $Width - $m, $Height - $m - $corner, $Width - $m - $corner, $Height - $m)
 
-            # Small medical '+' at top-left and ECG pulse at top-center.
             $plusX = $m + [int]($corner * 0.55)
             $plusY = $m + [int]($corner * 0.55)
             $plusR = [int][Math]::Max(8, $short * 0.012)
@@ -215,13 +213,24 @@ jobs:
           set -euo pipefail
           if [[ "$GITHUB_REF" == refs/heads/release/v* ]]; then
             version="${GITHUB_REF_NAME#release/}"
+            zip="release-artifact/BPSR-Portable-Stream-Kit-win-x64.zip"
+            test -f "$zip"
+
+            # A release branch is authoritative for that version. Recreate an
+            # existing stale release/tag so both the asset and tag target the
+            # commit that actually passed this build.
+            if gh release view "$version" >/dev/null 2>&1; then
+              gh release delete "$version" --cleanup-tag --yes
+            fi
+            gh release create "$version" "$zip" --target "$GITHUB_SHA" --generate-notes --title "BPSR Portable Stream Kit $version"
           else
             version="$GITHUB_REF_NAME"
-          fi
-          zip="release-artifact/BPSR-Portable-Stream-Kit-win-x64.zip"
-          test -f "$zip"
-          if gh release view "$version" >/dev/null 2>&1; then
-            gh release upload "$version" "$zip" --clobber
-          else
-            gh release create "$version" "$zip" --target "$GITHUB_SHA" --generate-notes --title "BPSR Portable Stream Kit $version"
+            zip="release-artifact/BPSR-Portable-Stream-Kit-win-x64.zip"
+            test -f "$zip"
+
+            if gh release view "$version" >/dev/null 2>&1; then
+              gh release upload "$version" "$zip" --clobber
+            else
+              gh release create "$version" "$zip" --target "$GITHUB_SHA" --generate-notes --title "BPSR Portable Stream Kit $version"
+            fi
           fi
