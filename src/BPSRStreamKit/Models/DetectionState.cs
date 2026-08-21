@@ -6,6 +6,8 @@ public sealed record DetectionState(
     bool ResonanceLogsRunning,
     bool AvatarReady,
     bool AudioIsolationReady,
+    bool VTubeStudioRunning,
+    bool AitumReady,
     string? ObsPath = null,
     string? GamePath = null,
     string? ResonanceLogsPath = null);
