@@ -1,24 +1,43 @@
-# Build output
+# .NET / publish output
 bin/
 obj/
 publish/
 artifacts/
+release-artifact/
+*.exe
+*.dll
+*.pdb
+*.zip
+*.msi
 
-# Portable runtime downloaded by the launcher
+# Downloaded portable runtimes / caches
 OBS/
 .cache/
 config-backup/
 
-# User/local secrets
+# Streaming credentials and local service profiles
 **/service.json
 **/*streamkey*
+**/*stream-key*
 **/*token*
+**/*cookie*
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# IDE / local user files
 *.user
 *.suo
 .vs/
-
-# OS/editor
-Thumbs.db
-.DS_Store
 .idea/
 .vscode/
+
+# OS / temp
+Thumbs.db
+.DS_Store
+*.log
+*.tmp

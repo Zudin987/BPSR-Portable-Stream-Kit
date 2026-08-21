@@ -1,0 +1,55 @@
+name: Repository hygiene
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Block generated distribution binaries in source
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden="$(git ls-files | grep -Ei '\.(exe|msi|dll|zip|7z|rar|pdb)$' || true)"
+          if [[ -n "$forbidden" ]]; then
+            echo "::error::Generated distribution/runtime binaries belong in Actions/Releases, not source."
+            printf '%s\n' "$forbidden"
+            exit 1
+          fi
+
+      - name: Block streaming credentials and private keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden="$(git ls-files | grep -Ei '(^|/)\.env($|\.)|(^|/)service\.json$|stream[-_]?key|token|cookie|\.(pem|key|p12|pfx)$' || true)"
+          if [[ -n "$forbidden" ]]; then
+            echo "::error::Streaming credentials/private-key material must not be committed."
+            printf '%s\n' "$forbidden"
+            exit 1
+          fi
+
+      - name: Block obvious committed secret material
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nEI -- '-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}' -- . ':!.github/workflows/repo-hygiene.yml' 2>/dev/null; then
+            echo "::error::Possible secret material detected in tracked source."
+            exit 1
+          fi
+
+      - name: Require source-only third-party runtime policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f THIRD_PARTY_NOTICES.md
+          ! git ls-files | grep -Ei '(^|/)OBS/|flood-tuber\.dll$'
