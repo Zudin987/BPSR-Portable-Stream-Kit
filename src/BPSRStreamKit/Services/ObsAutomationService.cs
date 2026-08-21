@@ -15,6 +15,9 @@ public sealed class ObsAutomationService
     private const string MicInputName = "Mic/Aux";
     private const string GameInputName = "Selected Game + Audio";
     private const string VTubeInputName = "VTube Studio Avatar";
+    private const string VTubeSceneName = "Game Clean";
+    private const string VTubeSenderName = "VTubeStudioSpout";
+    private const string SpoutFirstAvailable = "usefirstavailablesender";
     private const string NoiseFilterName = "StreamKit RNNoise";
     private static string KeyFile => Path.Combine(AppPaths.Root, "user-data", "obs-websocket.key");
 
@@ -212,17 +215,128 @@ public sealed class ObsAutomationService
 
     public async Task<bool> WaitForVTubeStudioVideoAsync(TimeSpan? timeout = null)
     {
-        var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(20));
-        while (DateTime.UtcNow < until)
+        var total = timeout ?? TimeSpan.FromSeconds(25);
+        var until = DateTime.UtcNow + total;
+
+        // Prefer VTube Studio's normal sender. If its sender name is different/numbered,
+        // automatically fall back to the first available Spout sender instead of making
+        // a beginner edit OBS manually.
+        foreach (var sender in new[] { VTubeSenderName, SpoutFirstAvailable })
         {
             try
             {
-                if (await HasTransparentVTubeFrameAsync()) return true;
+                await PrepareVTubeStudioInputAsync(VTubeSceneName, sender);
+                await SetCurrentSceneAsync(VTubeSceneName);
             }
             catch { }
-            await Task.Delay(700);
+
+            var phaseUntil = sender == VTubeSenderName
+                ? DateTime.UtcNow + TimeSpan.FromSeconds(Math.Min(8, Math.Max(4, total.TotalSeconds / 2)))
+                : until;
+            if (phaseUntil > until) phaseUntil = until;
+
+            while (DateTime.UtcNow < phaseUntil)
+            {
+                try
+                {
+                    if (await HasTransparentVTubeFrameAsync()) return true;
+                }
+                catch { }
+                await Task.Delay(650);
+            }
         }
         return false;
+    }
+
+    public async Task PrepareVTubeStudioInputAsync(string sceneName = VTubeSceneName, string sender = VTubeSenderName)
+    {
+        await WithSessionAsync(async session =>
+        {
+            var list = await session.RequestAsync("GetInputList");
+            var input = list?["inputs"]?.AsArray()?.OfType<JsonObject>()
+                .FirstOrDefault(x => string.Equals(x["inputName"]?.GetValue<string>(), VTubeInputName, StringComparison.Ordinal));
+            var kind = input?["inputKind"]?.GetValue<string>() ?? string.Empty;
+
+            if (input is not null && !kind.Equals("spout_capture", StringComparison.OrdinalIgnoreCase))
+            {
+                await session.RequestAsync("RemoveInput", new JsonObject { ["inputName"] = VTubeInputName });
+                input = null;
+            }
+
+            var settings = new JsonObject
+            {
+                ["spoutsenders"] = sender,
+                ["tickspeedlimit"] = 100,
+                ["compositemode"] = 4
+            };
+
+            if (input is null)
+            {
+                await session.RequestAsync("CreateInput", new JsonObject
+                {
+                    ["sceneName"] = sceneName,
+                    ["inputName"] = VTubeInputName,
+                    ["inputKind"] = "spout_capture",
+                    ["inputSettings"] = settings,
+                    ["sceneItemEnabled"] = true
+                });
+            }
+            else
+            {
+                await session.RequestAsync("SetInputSettings", new JsonObject
+                {
+                    ["inputName"] = VTubeInputName,
+                    ["inputSettings"] = settings,
+                    ["overlay"] = true
+                });
+            }
+
+            var itemsResponse = await session.RequestAsync("GetSceneItemList", new JsonObject { ["sceneName"] = sceneName });
+            var item = itemsResponse?["sceneItems"]?.AsArray()?.OfType<JsonObject>()
+                .FirstOrDefault(x => string.Equals(x["sourceName"]?.GetValue<string>(), VTubeInputName, StringComparison.Ordinal));
+            int sceneItemId;
+            if (item is null)
+            {
+                var created = await session.RequestAsync("CreateSceneItem", new JsonObject
+                {
+                    ["sceneName"] = sceneName,
+                    ["sourceName"] = VTubeInputName,
+                    ["sceneItemEnabled"] = true
+                });
+                sceneItemId = created?["sceneItemId"]?.GetValue<int>()
+                              ?? throw new InvalidOperationException("OBS created the avatar source but did not return its scene item ID.");
+                await session.RequestAsync("SetSceneItemTransform", new JsonObject
+                {
+                    ["sceneName"] = sceneName,
+                    ["sceneItemId"] = sceneItemId,
+                    ["sceneItemTransform"] = new JsonObject
+                    {
+                        ["positionX"] = 20.0,
+                        ["positionY"] = 500.0,
+                        ["alignment"] = 5,
+                        ["boundsType"] = "OBS_BOUNDS_SCALE_INNER",
+                        ["boundsAlignment"] = 5,
+                        ["boundsWidth"] = 520.0,
+                        ["boundsHeight"] = 570.0
+                    }
+                });
+            }
+            else
+            {
+                sceneItemId = item["sceneItemId"]?.GetValue<int>() ?? 0;
+            }
+
+            if (sceneItemId > 0)
+            {
+                await session.RequestAsync("SetSceneItemEnabled", new JsonObject
+                {
+                    ["sceneName"] = sceneName,
+                    ["sceneItemId"] = sceneItemId,
+                    ["sceneItemEnabled"] = true
+                });
+            }
+            return true;
+        });
     }
 
     private async Task<bool> HasTransparentVTubeFrameAsync()
