@@ -40,22 +40,36 @@ jobs:
         run: |
           Add-Type -AssemblyName System.Drawing
 
+          function Add-SakuraMark([Drawing.Graphics]$g,[Drawing.Brush]$brush,[int]$x,[int]$y,[int]$s) {
+            $half=[int][Math]::Max(1,[Math]::Round($s/2))
+            $g.FillEllipse($brush,$x,$y,$s,$s*2)
+            $g.FillEllipse($brush,$x+$s,$y+$half,$s*2,$s)
+          }
+
           function New-SakuraFrame([string]$Path,[int]$W,[int]$H) {
             New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
             $bmp=[Drawing.Bitmap]::new($W,$H,[Drawing.Imaging.PixelFormat]::Format32bppArgb)
-            $g=[Drawing.Graphics]::FromImage($bmp); $g.SmoothingMode='AntiAlias'; $g.Clear([Drawing.Color]::Transparent)
-            $pink=[Drawing.Color]::FromArgb(238,231,116,176); $violet=[Drawing.Color]::FromArgb(155,177,124,241); $soft=[Drawing.Color]::FromArgb(190,255,199,225)
-            $p1=[Drawing.Pen]::new($pink,2); $p2=[Drawing.Pen]::new($violet,1); $b=[Drawing.SolidBrush]::new($soft)
+            $g=[Drawing.Graphics]::FromImage($bmp)
+            $g.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $g.Clear([Drawing.Color]::Transparent)
+            $pink=[Drawing.Color]::FromArgb(238,231,116,176)
+            $violet=[Drawing.Color]::FromArgb(155,177,124,241)
+            $soft=[Drawing.Color]::FromArgb(190,255,199,225)
+            $p1=[Drawing.Pen]::new($pink,2)
+            $p2=[Drawing.Pen]::new($violet,1)
+            $b=[Drawing.SolidBrush]::new($soft)
             $m=1; $i=5
-            $g.DrawRectangle($p1,$m,$m,$W-2*$m-1,$H-2*$m-1)
-            $g.DrawRectangle($p2,$i,$i,$W-2*$i-1,$H-2*$i-1)
-            $s=[int][Math]::Max(7,[Math]::Min($W,$H)*.008)
-            foreach($pt in @(@($i+16,$i+16),@($W-$i-28,$i+16),@($i+16,$H-$i-28),@($W-$i-28,$H-$i-28))) {
-              $x=[int]$pt[0];$y=[int]$pt[1]
-              $g.FillEllipse($b,$x,$y,$s,$s*2); $g.FillEllipse($b,$x+$s,$y+$s/2,$s*2,$s)
-            }
+            $g.DrawRectangle($p1,$m,$m,$W-(2*$m)-1,$H-(2*$m)-1)
+            $g.DrawRectangle($p2,$i,$i,$W-(2*$i)-1,$H-(2*$i)-1)
+            $s=[int][Math]::Max(7,[Math]::Round([Math]::Min($W,$H)*0.008))
+            Add-SakuraMark $g $b ($i+16) ($i+16) $s
+            Add-SakuraMark $g $b ($W-$i-28) ($i+16) $s
+            Add-SakuraMark $g $b ($i+16) ($H-$i-28) $s
+            Add-SakuraMark $g $b ($W-$i-28) ($H-$i-28) $s
             $spark=[Drawing.Pen]::new($soft,1)
-            $cx=[int]($W*.5); $g.DrawLine($spark,$cx-10,$i+5,$cx+10,$i+5); $g.DrawLine($spark,$cx,$i,$cx,$i+10)
+            $cx=[int]($W*0.5)
+            $g.DrawLine($spark,$cx-10,$i+5,$cx+10,$i+5)
+            $g.DrawLine($spark,$cx,$i,$cx,$i+10)
             $bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Png)
             $spark.Dispose();$b.Dispose();$p1.Dispose();$p2.Dispose();$g.Dispose();$bmp.Dispose()
           }
@@ -63,19 +77,33 @@ jobs:
           function New-MedicalFrame([string]$Path,[int]$W,[int]$H) {
             New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
             $bmp=[Drawing.Bitmap]::new($W,$H,[Drawing.Imaging.PixelFormat]::Format32bppArgb)
-            $g=[Drawing.Graphics]::FromImage($bmp); $g.SmoothingMode='AntiAlias'; $g.Clear([Drawing.Color]::Transparent)
-            $cyan=[Drawing.Color]::FromArgb(238,31,211,235); $white=[Drawing.Color]::FromArgb(220,238,252,255); $soft=[Drawing.Color]::FromArgb(170,111,231,242)
-            $p1=[Drawing.Pen]::new($cyan,2); $p2=[Drawing.Pen]::new($white,1); $p3=[Drawing.Pen]::new($soft,2)
-            $m=1;$i=5
-            $g.DrawRectangle($p1,$m,$m,$W-2*$m-1,$H-2*$m-1)
-            $g.DrawRectangle($p2,$i,$i,$W-2*$i-1,$H-2*$i-1)
-            $r=[int][Math]::Max(8,[Math]::Min($W,$H)*.009)
-            foreach($pt in @(@($i+22,$i+22),@($W-$i-22,$H-$i-22))) {
-              $x=[int]$pt[0];$y=[int]$pt[1]
-              $g.DrawLine($p3,$x-$r,$y,$x+$r,$y); $g.DrawLine($p3,$x,$y-$r,$x,$y+$r)
-            }
-            $cy=$i+8; $cx=[int]($W*.50); $step=[int][Math]::Max(8,[Math]::Min($W,$H)*.008)
-            $pts=[Drawing.Point[]]@([Drawing.Point]::new($cx-4*$step,$cy),[Drawing.Point]::new($cx-2*$step,$cy),[Drawing.Point]::new($cx-$step,$cy-$step),[Drawing.Point]::new($cx,$cy+$step),[Drawing.Point]::new($cx+$step,$cy-2*$step),[Drawing.Point]::new($cx+2*$step,$cy),[Drawing.Point]::new($cx+4*$step,$cy))
+            $g=[Drawing.Graphics]::FromImage($bmp)
+            $g.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $g.Clear([Drawing.Color]::Transparent)
+            $cyan=[Drawing.Color]::FromArgb(238,31,211,235)
+            $white=[Drawing.Color]::FromArgb(220,238,252,255)
+            $soft=[Drawing.Color]::FromArgb(170,111,231,242)
+            $p1=[Drawing.Pen]::new($cyan,2)
+            $p2=[Drawing.Pen]::new($white,1)
+            $p3=[Drawing.Pen]::new($soft,2)
+            $m=1; $i=5
+            $g.DrawRectangle($p1,$m,$m,$W-(2*$m)-1,$H-(2*$m)-1)
+            $g.DrawRectangle($p2,$i,$i,$W-(2*$i)-1,$H-(2*$i)-1)
+            $r=[int][Math]::Max(8,[Math]::Round([Math]::Min($W,$H)*0.009))
+            $x=$i+22; $y=$i+22
+            $g.DrawLine($p3,$x-$r,$y,$x+$r,$y); $g.DrawLine($p3,$x,$y-$r,$x,$y+$r)
+            $x=$W-$i-22; $y=$H-$i-22
+            $g.DrawLine($p3,$x-$r,$y,$x+$r,$y); $g.DrawLine($p3,$x,$y-$r,$x,$y+$r)
+            $cy=$i+8; $cx=[int]($W*0.50); $step=[int][Math]::Max(8,[Math]::Round([Math]::Min($W,$H)*0.008))
+            $pts=[Drawing.Point[]]@(
+              [Drawing.Point]::new($cx-(4*$step),$cy),
+              [Drawing.Point]::new($cx-(2*$step),$cy),
+              [Drawing.Point]::new($cx-$step,$cy-$step),
+              [Drawing.Point]::new($cx,$cy+$step),
+              [Drawing.Point]::new($cx+$step,$cy-(2*$step)),
+              [Drawing.Point]::new($cx+(2*$step),$cy),
+              [Drawing.Point]::new($cx+(4*$step),$cy)
+            )
             $g.DrawLines($p3,$pts)
             $bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Png)
             $p1.Dispose();$p2.Dispose();$p3.Dispose();$g.Dispose();$bmp.Dispose()
@@ -84,29 +112,65 @@ jobs:
           function New-ThemeScreen([string]$Path,[string]$Avatar,[int]$W,[int]$H,[string]$Title,[string]$Theme) {
             New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
             $bmp=[Drawing.Bitmap]::new($W,$H,[Drawing.Imaging.PixelFormat]::Format24bppRgb)
-            $g=[Drawing.Graphics]::FromImage($bmp); $g.SmoothingMode='AntiAlias'; $g.InterpolationMode='HighQualityBicubic'
+            $g=[Drawing.Graphics]::FromImage($bmp)
+            $g.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $g.InterpolationMode=[Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
             $vertical=$H -gt $W
-            if($Theme -eq 'sakura') { $bg=[Drawing.Color]::FromArgb(20,12,28);$accent=[Drawing.Color]::FromArgb(232,122,177);$accent2=[Drawing.Color]::FromArgb(177,126,239);$white=[Drawing.Color]::FromArgb(251,241,249) }
-            else { $bg=[Drawing.Color]::FromArgb(7,15,24);$accent=[Drawing.Color]::FromArgb(58,215,232);$accent2=[Drawing.Color]::FromArgb(206,248,255);$white=[Drawing.Color]::FromArgb(238,252,255) }
+            if($Theme -eq 'sakura') {
+              $bg=[Drawing.Color]::FromArgb(20,12,28)
+              $accent=[Drawing.Color]::FromArgb(232,122,177)
+              $accent2=[Drawing.Color]::FromArgb(177,126,239)
+              $white=[Drawing.Color]::FromArgb(251,241,249)
+            } else {
+              $bg=[Drawing.Color]::FromArgb(7,15,24)
+              $accent=[Drawing.Color]::FromArgb(58,215,232)
+              $accent2=[Drawing.Color]::FromArgb(206,248,255)
+              $white=[Drawing.Color]::FromArgb(238,252,255)
+            }
             $g.Clear($bg)
-            $m=[int][Math]::Max(10,[Math]::Min($W,$H)*.012);$p=[Drawing.Pen]::new($accent,2);$p2=[Drawing.Pen]::new($accent2,1)
-            $g.DrawRectangle($p,$m,$m,$W-2*$m-1,$H-2*$m-1);$g.DrawRectangle($p2,$m+7,$m+7,$W-2*($m+7)-1,$H-2*($m+7)-1)
-            $ts=[single](if($vertical){[Math]::Max(72,$W*.095)}else{[Math]::Max(76,$H*.095)})
-            $tf=[Drawing.Font]::new('Segoe UI',$ts,[Drawing.FontStyle]::Bold);$wb=[Drawing.SolidBrush]::new($white)
-            $size=$g.MeasureString($Title,$tf);$tx=[single](($W-$size.Width)/2);$ty=[single](if($vertical){$H*.18}else{$H*.24})
+            $m=[int][Math]::Max(10,[Math]::Round([Math]::Min($W,$H)*0.012))
+            $p=[Drawing.Pen]::new($accent,2)
+            $p2=[Drawing.Pen]::new($accent2,1)
+            $g.DrawRectangle($p,$m,$m,$W-(2*$m)-1,$H-(2*$m)-1)
+            $g.DrawRectangle($p2,$m+7,$m+7,$W-(2*($m+7))-1,$H-(2*($m+7))-1)
+            if($vertical) {
+              $ts=[single][Math]::Max(72,$W*0.095)
+              $ty=[single]($H*0.18)
+              $ax=[int]($W*0.18);$ay=[int]($H*0.40);$aw=[int]($W*0.64);$ah=[int]($H*0.50)
+            } else {
+              $ts=[single][Math]::Max(76,$H*0.095)
+              $ty=[single]($H*0.24)
+              $ax=[int]($W*0.62);$ay=[int]($H*0.12);$aw=[int]($W*0.30);$ah=[int]($H*0.80)
+            }
+            $tf=[Drawing.Font]::new('Segoe UI',$ts,[Drawing.FontStyle]::Bold)
+            $wb=[Drawing.SolidBrush]::new($white)
+            $size=$g.MeasureString($Title,$tf)
+            $tx=[single](($W-$size.Width)/2)
             $g.DrawString($Title,$tf,$wb,$tx,$ty)
             $img=[Drawing.Image]::FromFile($Avatar)
-            if($vertical){$ax=[int]($W*.18);$ay=[int]($H*.40);$aw=[int]($W*.64);$ah=[int]($H*.50)}else{$ax=[int]($W*.62);$ay=[int]($H*.12);$aw=[int]($W*.30);$ah=[int]($H*.80)}
-            $r=[Math]::Min($aw/$img.Width,$ah/$img.Height);$dw=[int]($img.Width*$r);$dh=[int]($img.Height*$r)
+            $ratio=[Math]::Min($aw/$img.Width,$ah/$img.Height)
+            $dw=[int]($img.Width*$ratio);$dh=[int]($img.Height*$ratio)
             $g.DrawImage($img,$ax+[int](($aw-$dw)/2),$ay+[int](($ah-$dh)/2),$dw,$dh)
             if($Theme -eq 'sakura') {
-              $b=[Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(190,255,192,222));$s=[int][Math]::Max(10,[Math]::Min($W,$H)*.012)
-              foreach($pt in @(@($m+30,$m+30),@($W-$m-55,$H-$m-70),@($W*.16,$H*.72))) {$x=[int]$pt[0];$y=[int]$pt[1];$g.FillEllipse($b,$x,$y,$s,$s*2);$g.FillEllipse($b,$x+$s,$y+$s/2,$s*2,$s)}
+              $b=[Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(190,255,192,222))
+              $s=[int][Math]::Max(10,[Math]::Round([Math]::Min($W,$H)*0.012))
+              Add-SakuraMark $g $b ($m+30) ($m+30) $s
+              Add-SakuraMark $g $b ($W-$m-55) ($H-$m-70) $s
+              Add-SakuraMark $g $b ([int]($W*0.16)) ([int]($H*0.72)) $s
               $b.Dispose()
             } else {
-              $med=[Drawing.Pen]::new($accent,3);$r2=[int][Math]::Max(12,[Math]::Min($W,$H)*.014);$x=$m+45;$y=$H-$m-55;$g.DrawLine($med,$x-$r2,$y,$x+$r2,$y);$g.DrawLine($med,$x,$y-$r2,$x,$y+$r2);$med.Dispose()
+              $med=[Drawing.Pen]::new($accent,3)
+              $r2=[int][Math]::Max(12,[Math]::Round([Math]::Min($W,$H)*0.014))
+              $x=$m+45;$y=$H-$m-55
+              $g.DrawLine($med,$x-$r2,$y,$x+$r2,$y)
+              $g.DrawLine($med,$x,$y-$r2,$x,$y+$r2)
+              $med.Dispose()
             }
-            if([IO.Path]::GetExtension($Path).ToLowerInvariant() -eq '.jpg'){$bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Jpeg)}else{$bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Png)}
+            if([IO.Path]::GetExtension($Path).ToLowerInvariant() -eq '.jpg') {
+              $bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Jpeg)
+            } else {
+              $bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Png)
+            }
             $img.Dispose();$tf.Dispose();$wb.Dispose();$p.Dispose();$p2.Dispose();$g.Dispose();$bmp.Dispose()
           }
 
