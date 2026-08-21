@@ -22,6 +22,34 @@ public sealed class DetectionService
                 && File.Exists(Path.Combine(AppPaths.AssetsDirectory, "MyAvatar", "idle.png"))
                 && File.Exists(Path.Combine(AppPaths.AssetsDirectory, "MyAvatar", "talk_a.png"));
 
+            var aitumReady = false;
+            if (obsRoot is not null)
+            {
+                try
+                {
+                    var pluginRoot = Path.Combine(obsRoot, "obs-plugins");
+                    aitumReady = Directory.Exists(pluginRoot) && Directory.EnumerateFiles(pluginRoot, "*.dll", SearchOption.AllDirectories)
+                        .Any(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase));
+                }
+                catch { }
+            }
+
+            var vtubeRunning = false;
+            try
+            {
+                vtubeRunning = Process.GetProcesses().Any(p =>
+                {
+                    try
+                    {
+                        using (p)
+                            return p.ProcessName.Replace(" ", string.Empty, StringComparison.Ordinal)
+                                .Contains("VTubeStudio", StringComparison.OrdinalIgnoreCase);
+                    }
+                    catch { p.Dispose(); return false; }
+                });
+            }
+            catch { }
+
             var audioReady = obsPath is not null
                 && File.Exists(Path.Combine(AppPaths.TemplatesDirectory, "basic", "profiles", "Discord Share", "basic.ini"));
 
@@ -31,6 +59,8 @@ public sealed class DetectionService
                 ResonanceLogsRunning: logs is not null,
                 AvatarReady: avatarReady,
                 AudioIsolationReady: audioReady,
+                VTubeStudioRunning: vtubeRunning,
+                AitumReady: aitumReady,
                 ObsPath: obsPath,
                 GamePath: SafeProcessPath(game),
                 ResonanceLogsPath: SafeProcessPath(logs));

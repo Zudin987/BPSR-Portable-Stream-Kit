@@ -285,22 +285,31 @@ jobs:
           )
           foreach($f in $required){if(-not(Test-Path $f)){throw "Missing release file: $f"}}
           @"
-          StreamKit v0.3.5
+          StreamKit v0.4.0
 
-          1. Extract the whole ZIP.
-          2. Run BPSRStreamKit.exe.
-          3. Open the game you want to stream and press Scan games if needed.
-          4. Choose Discord, Twitch or TikTok, choose a visual profile, then press the main Open Stream action.
+          1. Extract the whole ZIP and run BPSRStreamKit.exe.
+          2. Open the game you want to stream and press Scan games if needed.
+          3. Choose an Avatar, Frame Theme and Stream Mode.
+          4. Full VTuber launches VTube Studio through Steam. On first use, choose a Live2D model and webcam in VTube Studio.
 
-          Discord: share the OBS Projector/preview window in Discord after StreamKit opens it.
-          Twitch/TikTok: connect your local account/stream method in portable OBS, then start streaming from OBS.
+          Discord Only:
+          - Click Open Discord VTuber.
+          - In Discord choose OBS Virtual Camera as your camera.
+          - Keep your normal Discord microphone selected. OBS Virtual Camera carries video only.
 
-          v0.3.5 removes avatars from Starting Soon/BRB screens, uses smaller centered titles, and adds richer themed frame decoration.
+          Discord + Twitch + TikTok:
+          - One-time: connect Twitch in portable OBS.
+          - One-time: Aitum Stream Suite -> Settings -> Outputs -> add TikTok, select Vertical canvas, enter the TikTok server/key available to your account.
+          - Later, Start All Platforms starts Discord Virtual Camera plus configured Twitch/TikTok outputs.
+
+          Stream keys/login data stay in your local portable OBS/Aitum configuration.
+          VTube Studio is external and is not bundled with StreamKit.
           "@ | Set-Content publish/START_HERE.txt -Encoding UTF8
           Compress-Archive publish/* StreamKit-win-x64.zip -Force
           $check=Join-Path $env:RUNNER_TEMP 'streamkit-check';if(Test-Path $check){Remove-Item $check -Recurse -Force}
           Expand-Archive StreamKit-win-x64.zip $check -Force
           if(-not(Test-Path (Join-Path $check 'BPSRStreamKit.exe'))){throw 'Packaged ZIP is missing the launcher'}
+          if(-not(Test-Path (Join-Path $check 'START_HERE.txt'))){throw 'Packaged ZIP is missing START_HERE'}
           if(-not(Test-Path (Join-Path $check 'Assets/Screens/BRB_1080p.png'))){throw 'Packaged ZIP is missing Profile A BRB'}
           if(-not(Test-Path (Join-Path $check 'Assets/Themes/Profile_B_Doctor/Screens/BRB_1080p.jpg'))){throw 'Packaged ZIP is missing Profile B BRB'}
 

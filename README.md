@@ -1,144 +1,149 @@
-# StreamKit — Portable Game Streaming Kit
+# StreamKit — Portable Game + VTuber Streaming
 
-StreamKit is a portable Windows launcher for **game streaming**. It prepares an isolated OBS setup for Discord, Twitch, and TikTok without requiring a normal system-wide OBS installation.
+StreamKit is a portable Windows launcher for getting a game, a VTuber avatar, Discord camera output, Twitch and TikTok into one simple workflow.
 
-> **Quick start:** Extract the whole release ZIP, run `BPSRStreamKit.exe`, choose a destination, game, and visual profile, then press the main action button. On first use StreamKit downloads its pinned portable OBS/FloodTuber components and prepares the scene automatically.
+> **Quick start:** Extract the whole release ZIP, run `BPSRStreamKit.exe`, choose a stream mode, avatar, frame theme and running game, then press the main button.
 
-## Core objective
+## Stream modes
 
-StreamKit is built for **games in general**, not for one specific title. A detected game gets a clean capture layout with:
+### Discord Only
 
-- the selected game window,
-- your microphone,
-- your chosen frame/theme,
-- your FloodTuber avatar,
-- no default desktop/display capture.
+This is the fastest mode.
 
-Some games can have optional extra integrations, but those are enhancements rather than the product's core purpose.
+1. Open the game.
+2. Run StreamKit.
+3. Choose **Discord Only**.
+4. Leave **Full VTuber** selected if you want VTube Studio, or choose PNG Avatar / None.
+5. Press **Open Discord VTuber**.
+6. StreamKit opens VTube Studio through Steam when needed, prepares portable OBS and starts **OBS Virtual Camera**.
+7. In Discord choose **OBS Virtual Camera** as your camera.
+8. Keep your normal microphone selected in Discord.
 
-## Destinations
+OBS Virtual Camera carries video, not the game audio. If you need Discord viewers to hear game audio too, use Discord screen share/audio separately.
 
-### Discord
+### Discord + Twitch + TikTok
 
-1. Select **Discord** in StreamKit.
-2. Choose your game and profile.
-3. Press **Open Discord Stream**.
-4. StreamKit opens the prepared OBS scene/projector.
-5. In Discord, start screen sharing and choose the **OBS Projector / OBS preview window**.
+This mode uses one portable OBS instance with separate horizontal and vertical outputs:
 
-Discord performs the actual broadcast; StreamKit prepares the clean video/audio source for it.
+- **Discord:** OBS Virtual Camera
+- **Twitch:** main 1920×1080 horizontal canvas
+- **TikTok:** Aitum 1080×1920 vertical canvas
 
-### Twitch
+On first use StreamKit installs the pinned Aitum Stream Suite plugin, creates the vertical canvas and prepares matching horizontal/vertical layouts.
 
-1. Select **Twitch**.
-2. Choose your game and profile.
-3. Press **Open Twitch Stream**.
-4. Connect your Twitch account or stream key inside the local portable OBS environment if this is your first time.
-5. Press **Start Streaming** in OBS.
+There is one unavoidable account step the first time:
 
-### TikTok
+1. In normal OBS **Settings → Stream**, connect Twitch.
+2. In **Aitum Stream Suite → Settings → Outputs**, add a TikTok stream output.
+3. Choose the **Vertical** canvas and enter the TikTok server/key provided to your account.
+4. Close OBS when finished.
 
-1. Select **TikTok**.
-2. Choose your game and profile.
-3. Press **Open TikTok Stream**.
-4. Complete the TikTok streaming method available to your account inside portable OBS.
-5. Start streaming from OBS.
+After that, **Start All Platforms** can start Twitch + TikTok together while OBS Virtual Camera supplies Discord.
 
-Twitch/TikTok credentials remain in the user's local portable OBS configuration and are never included in this repository or release assets.
+TikTok requires LIVE/stream-key access on the TikTok account. StreamKit cannot grant that access.
 
-## Visual profiles
+## Avatar modes
 
-### Profile A — Sakura Catgirl
+### Full VTuber — recommended
 
-- Sakura/pink FloodTuber avatar set
-- Thin edge-hugging frame with small petal/sparkle details
-- Matching 16:9 and 9:16 layouts
-- Sakura-themed **STARTING SOON** and **BE RIGHT BACK** screens
+Uses **VTube Studio** as the main avatar and hides the old PNG/FloodTuber source.
 
-### Profile B — Chibi Doctor
+- VTube Studio opens through Steam automatically.
+- Webcam face tracking, head motion, blinking, mouth movement, expressions and Live2D physics are handled by VTube Studio.
+- The webcam itself is not added to the stream scene.
+- Use a bundled/sample VTube Studio model or any compatible Live2D model you have permission to use.
 
-- Chibi doctor FloodTuber avatar set
-- Thin cyan/white medical frame with small cross/ECG details
-- Matching 16:9 and 9:16 layouts
-- Medical-themed **STARTING SOON** and **BE RIGHT BACK** screens
+For a clean transparent OBS capture, enable VTube Studio's transparent/game-capture background option for the model output.
 
-The selected profile is remembered locally and applied automatically.
+### PNG Avatar
 
-## Quick Start
+Uses the existing lightweight FloodTuber avatar. This is kept as a fallback for PCs or users that do not want webcam tracking.
 
-1. Download the latest release ZIP and **extract the whole folder**.
-2. Run `BPSRStreamKit.exe` and allow the Administrator prompt.
-3. Choose **Discord / Twitch / TikTok**, select the game you want to capture, choose Profile A or B, then press the main action button.
+### None
 
-Do not move only the EXE out of the extracted folder. The packaged assets, templates, and portable runtime files belong together.
+Hides both avatar systems and streams only the game + selected frame.
 
-## Game detection
+## Frame themes
 
-StreamKit scans running application windows and builds a game list automatically. If a game is not listed yet, open the game and press **Scan games**.
+**Profile A — Sakura** uses the pink/purple Sakura frame and matching Starting Soon / BRB screens.
 
-A small number of titles may have optional custom layouts or integrations. Those do not change the default behavior: StreamKit should remain useful as a generic game-streaming tool.
+**Profile B — Chibi Doctor** uses the cyan/white medical frame and matching Starting Soon / BRB screens.
 
-## Privacy / capture model
+The frame theme is independent from the avatar mode. A full VTube Studio model can therefore use either frame.
 
-The default scene is designed around **selected game + microphone**, not full-display capture.
+## What StreamKit automates
 
-The repository must never contain:
+StreamKit handles the repetitive pieces for you:
+
+- portable OBS setup,
+- FloodTuber fallback setup,
+- Aitum Stream Suite setup for multistream mode,
+- local authenticated OBS WebSocket automation,
+- game-window capture,
+- VTube Studio capture source,
+- horizontal Twitch/Discord scene,
+- vertical TikTok scene,
+- OBS Virtual Camera,
+- starting all configured Twitch/TikTok stream outputs together,
+- remembering your stream mode, avatar choice, frame theme and last game.
+
+VTube Studio, Twitch and TikTok still require their own legitimate account/model access. StreamKit does not bypass platform requirements.
+
+## Privacy and local credentials
+
+The default scene is designed around **selected game + microphone**, not full desktop capture.
+
+Twitch/TikTok credentials, OAuth data, Aitum outputs and the local OBS WebSocket password stay inside the extracted StreamKit folder on the user's PC. They are not part of the repository or release ZIP.
+
+Never commit or share:
 
 - OBS `service.json`,
 - Twitch/TikTok stream keys,
 - OAuth/login tokens,
 - browser cookies,
-- exported streaming profiles containing credentials.
-
-Always review the active OBS scene before going live, especially after manually editing templates or sources.
-
-## Why Administrator permission appears
-
-The launcher currently requests Administrator permission for game/window detection and portable-OBS integration. This behavior is explicit in the Windows manifest.
+- your generated `user-data/` files,
+- an already-used portable OBS config folder containing account credentials.
 
 ## First-run downloads
 
 StreamKit currently pins:
 
-- **OBS Studio 32.2.1** — downloaded from the official OBS GitHub release and verified against a hard-coded SHA-256.
-- **FloodTuber 1.1.0** — downloaded from the official FloodTuber GitHub release and checked for the expected plugin layout.
+- **OBS Studio 32.2.1** — official OBS GitHub release, SHA-256 verified.
+- **FloodTuber 1.1.0** — official FloodTuber release; used for PNG fallback mode.
+- **Aitum Stream Suite 1.2.1** — official Aitum GitHub release; installed only when All Platforms mode needs it.
 
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party notices.
+VTube Studio is launched through its normal Steam app (**Steam App 1325860**) instead of being bundled with StreamKit.
+
+## Game detection
+
+Open the game first. StreamKit scans visible running application windows. If the game is not listed, press **Scan games**.
+
+The historical internal project/scene names still contain `BPSR` for compatibility with existing installs. User-facing behavior is game-generic.
 
 ## Repair / advanced controls
 
-Advanced tools can open OBS, open the portable folder, rescan games, and repair the prepared configuration. Repair is intended to preserve local streaming-account settings rather than replacing them.
+Advanced controls provide:
 
-## Visual assets
-
-Release assets live under:
-
-```text
-Assets/Frames/
-Assets/Screens/
-Assets/MyAvatar/                       # Profile A
-Assets/Themes/Profile_B_Doctor/       # Profile B
-```
-
-See [Assets/README.md](Assets/README.md).
-
-Only add visual assets you own or are permitted to distribute/use.
+- **VTube Studio** — open it through Steam,
+- **Open OBS** — inspect/edit the portable OBS setup,
+- **Open folder** — open the StreamKit folder,
+- **Repair** — restore missing runtime/plugin/layout files while preserving existing local account/output settings where possible.
 
 ## Building from source
 
-The project targets .NET 8 on Windows.
+The launcher targets .NET 8 on Windows:
 
 ```text
 dotnet restore src/BPSRStreamKit/BPSRStreamKit.csproj
 dotnet publish src/BPSRStreamKit/BPSRStreamKit.csproj -c Release -r win-x64 --self-contained true
 ```
 
-The historical repository/project namespace still contains `BPSR` for compatibility, but the product direction and user experience are game-generic.
-
 ## Project source licence status
 
-This private repository currently does **not** contain a project-wide `LICENSE` file. Third-party licences for OBS, FloodTuber, .NET/runtime components, and other dependencies do not automatically grant a licence to the original StreamKit source/assets.
+This private repository currently does **not** contain a project-wide `LICENSE` file. Third-party licences do not automatically grant a licence to original StreamKit source/assets.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party notices.
 
 ## Disclaimer
 
-This is an unofficial community streaming utility. Game titles, OBS Studio, FloodTuber, Discord, Twitch, TikTok, and other names/services belong to their respective owners. StreamKit is not endorsed by those services unless explicitly stated by them.
+This is an unofficial community streaming utility. OBS Studio, VTube Studio, Aitum Stream Suite, FloodTuber, Discord, Twitch, TikTok, Steam and game names belong to their respective owners. StreamKit is not endorsed by those services unless explicitly stated otherwise.
