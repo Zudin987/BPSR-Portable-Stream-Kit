@@ -59,6 +59,28 @@ jobs:
             $p1.Dispose();$p2.Dispose();$g.Dispose();$bmp.Dispose()
           }
 
+          function New-SakuraScreen([string]$Path,[string]$Avatar,[int]$W,[int]$H) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
+            $bmp=[Drawing.Bitmap]::new($W,$H,[Drawing.Imaging.PixelFormat]::Format24bppRgb)
+            $g=[Drawing.Graphics]::FromImage($bmp); $g.SmoothingMode='AntiAlias'; $g.InterpolationMode='HighQualityBicubic'
+            $g.Clear([Drawing.Color]::FromArgb(20,12,28))
+            $pink=[Drawing.Color]::FromArgb(232,122,177); $violet=[Drawing.Color]::FromArgb(174,121,238); $white=[Drawing.Color]::FromArgb(249,239,248); $muted=[Drawing.Color]::FromArgb(204,177,207)
+            $m=[int]([Math]::Max(26,[Math]::Min($W,$H)/30)); $p=[Drawing.Pen]::new($pink,3); $p2=[Drawing.Pen]::new($violet,1)
+            $g.DrawRectangle($p,$m,$m,$W-2*$m-1,$H-2*$m-1); $g.DrawRectangle($p2,$m+8,$m+8,$W-2*($m+8)-1,$H-2*($m+8)-1)
+            $vertical=$H -gt $W
+            if ($vertical) { $tx=[int]($W*.09);$ty=[int]($H*.17);$ax=[int]($W*.12);$ay=[int]($H*.45);$aw=[int]($W*.76);$ah=[int]($H*.48);$ts=[single]([Math]::Max(58,$W*.075));$ss=[single]([Math]::Max(24,$W*.034)) }
+            else { $tx=[int]($W*.09);$ty=[int]($H*.30);$ax=[int]($W*.60);$ay=[int]($H*.08);$aw=[int]($W*.35);$ah=[int]($H*.86);$ts=[single]([Math]::Max(58,$H*.078));$ss=[single]([Math]::Max(24,$H*.032)) }
+            $tf=[Drawing.Font]::new('Segoe UI',$ts,[Drawing.FontStyle]::Bold); $sf=[Drawing.Font]::new('Segoe UI',$ss)
+            $wb=[Drawing.SolidBrush]::new($white); $mb=[Drawing.SolidBrush]::new($muted); $pb=[Drawing.SolidBrush]::new($pink)
+            $g.DrawString('STARTING SOON',$tf,$wb,$tx,$ty)
+            $g.DrawString('Getting the stream ready...',$sf,$mb,$tx,[single]($ty+$ts*1.35))
+            $g.DrawString('PROFILE A · SAKURA CATGIRL',$sf,$pb,$tx,[single]($ty+$ts*1.35+$ss*1.7))
+            $img=[Drawing.Image]::FromFile($Avatar); $r=[Math]::Min($aw/$img.Width,$ah/$img.Height); $dw=[int]($img.Width*$r);$dh=[int]($img.Height*$r)
+            $g.DrawImage($img,$ax+[int](($aw-$dw)/2),$ay+[int](($ah-$dh)/2),$dw,$dh)
+            $bmp.Save($Path,[Drawing.Imaging.ImageFormat]::Png)
+            $img.Dispose();$tf.Dispose();$sf.Dispose();$wb.Dispose();$mb.Dispose();$pb.Dispose();$p.Dispose();$p2.Dispose();$g.Dispose();$bmp.Dispose()
+          }
+
           function New-MedicalFrame([string]$Path,[int]$W,[int]$H) {
             New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
             $bmp=[Drawing.Bitmap]::new($W,$H,[Drawing.Imaging.PixelFormat]::Format32bppArgb)
@@ -94,6 +116,8 @@ jobs:
 
           New-SakuraFrame 'publish/Assets/Frames/01_Minimal_Thin_1080p.png' 1920 1080
           New-SakuraFrame 'publish/Assets/Frames/05_TikTok_Minimal_1080x1920.png' 1080 1920
+          New-SakuraScreen 'publish/Assets/Screens/Starting_1080p.png' 'publish/Assets/MyAvatar/idle.png' 1920 1080
+          New-SakuraScreen 'publish/Assets/Screens/Starting_TikTok_1080x1920.png' 'publish/Assets/MyAvatar/idle.png' 1080 1920
 
           $theme='publish/Assets/Themes/Profile_B_Doctor'
           New-MedicalFrame "$theme/Frames/Discord_1080p.png" 1920 1080
@@ -110,6 +134,8 @@ jobs:
             'publish/BPSRStreamKit.exe',
             'publish/Assets/Frames/01_Minimal_Thin_1080p.png',
             'publish/Assets/Frames/05_TikTok_Minimal_1080x1920.png',
+            'publish/Assets/Screens/Starting_1080p.png',
+            'publish/Assets/Screens/Starting_TikTok_1080x1920.png',
             'publish/Assets/MyAvatar/idle.png',
             'publish/Assets/Themes/Profile_B_Doctor/Avatar/idle.png',
             'publish/Assets/Themes/Profile_B_Doctor/Avatar/action.png',
@@ -124,15 +150,16 @@ jobs:
           )
           foreach($f in $required){ if(-not(Test-Path $f)){ throw "Missing release file: $f" } }
           @"
-          BPSR Portable Stream Kit v0.3.2
+          BPSR Portable Stream Kit v0.3.3
 
           Extract the whole ZIP, run BPSRStreamKit.exe, choose a profile/game/destination and press Start.
-          Profile B now has matching Starting Soon + BRB screens. Use Stop Stream to close portable OBS.
+          Profile A Starting Soon is now game-neutral. Profile B keeps matching Starting Soon + BRB screens. Use Stop Stream to close portable OBS.
           "@ | Set-Content publish/START_HERE.txt -Encoding UTF8
           Compress-Archive publish/* BPSR-Portable-Stream-Kit-win-x64.zip -Force
           $check=Join-Path $env:RUNNER_TEMP 'bpsr-check'; if(Test-Path $check){Remove-Item $check -Recurse -Force}
           Expand-Archive BPSR-Portable-Stream-Kit-win-x64.zip $check -Force
           if(-not(Test-Path (Join-Path $check 'BPSRStreamKit.exe'))){throw 'Packaged ZIP is missing BPSRStreamKit.exe'}
+          if(-not(Test-Path (Join-Path $check 'Assets/Screens/Starting_1080p.png'))){throw 'Packaged ZIP is missing Profile A Starting Soon'}
           if(-not(Test-Path (Join-Path $check 'Assets/Themes/Profile_B_Doctor/Screens/Starting_1080p.jpg'))){throw 'Packaged ZIP is missing Profile B screens'}
 
       - uses: actions/upload-artifact@v4
