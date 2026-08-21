@@ -86,6 +86,44 @@ public sealed class ObsService
         Process.Start(startInfo);
     }
 
+    public bool Stop()
+    {
+        var obsExe = AppPaths.FindObsExe();
+        if (string.IsNullOrWhiteSpace(obsExe)) return false;
+
+        var expectedPath = Path.GetFullPath(obsExe);
+        var processName = Path.GetFileNameWithoutExtension(obsExe);
+        var stoppedAny = false;
+
+        foreach (var process in Process.GetProcessesByName(processName))
+        {
+            try
+            {
+                var actualPath = process.MainModule?.FileName;
+                if (string.IsNullOrWhiteSpace(actualPath) ||
+                    !Path.GetFullPath(actualPath).Equals(expectedPath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                stoppedAny = true;
+                if (!process.CloseMainWindow() || !process.WaitForExit(3000))
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(3000);
+                }
+            }
+            catch
+            {
+                // Do not terminate another OBS installation when its executable path cannot be verified.
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        return stoppedAny;
+    }
+
     private static void ApplyTheme(StreamTheme theme)
     {
         var configRoot = AppPaths.ObsConfigRoot() ?? throw new InvalidOperationException("Portable OBS config path could not be resolved.");
@@ -94,6 +132,10 @@ public sealed class ObsService
         string avatarDirectory;
         string horizontalFrame;
         string verticalFrame;
+        string horizontalStarting;
+        string horizontalBrb;
+        string verticalStarting;
+        string verticalBrb;
         var showDpsPanel = theme == StreamTheme.ProfileA;
 
         if (theme == StreamTheme.ProfileB)
@@ -102,12 +144,20 @@ public sealed class ObsService
             avatarDirectory = Path.Combine(themeRoot, "Avatar");
             horizontalFrame = Path.Combine(themeRoot, "Frames", "Discord_1080p.png");
             verticalFrame = Path.Combine(themeRoot, "Frames", "TikTok_1080x1920.png");
+            horizontalStarting = Path.Combine(themeRoot, "Screens", "Starting_1080p.jpg");
+            horizontalBrb = Path.Combine(themeRoot, "Screens", "BRB_1080p.jpg");
+            verticalStarting = Path.Combine(themeRoot, "Screens", "Starting_TikTok_1080x1920.jpg");
+            verticalBrb = Path.Combine(themeRoot, "Screens", "BRB_TikTok_1080x1920.jpg");
         }
         else
         {
             avatarDirectory = Path.Combine(AppPaths.AssetsDirectory, "MyAvatar");
             horizontalFrame = Path.Combine(AppPaths.AssetsDirectory, "Frames", "01_Minimal_Thin_1080p.png");
             verticalFrame = Path.Combine(AppPaths.AssetsDirectory, "Frames", "05_TikTok_Minimal_1080x1920.png");
+            horizontalStarting = Path.Combine(AppPaths.AssetsDirectory, "Screens", "Starting_1080p.png");
+            horizontalBrb = Path.Combine(AppPaths.AssetsDirectory, "Screens", "BRB_1080p.png");
+            verticalStarting = Path.Combine(AppPaths.AssetsDirectory, "Screens", "Starting_TikTok_1080x1920.png");
+            verticalBrb = Path.Combine(AppPaths.AssetsDirectory, "Screens", "BRB_TikTok_1080x1920.png");
         }
 
         var required = new[]
@@ -117,7 +167,11 @@ public sealed class ObsService
             Path.Combine(avatarDirectory, "action.png"),
             Path.Combine(avatarDirectory, "talk_a.png"),
             horizontalFrame,
-            verticalFrame
+            verticalFrame,
+            horizontalStarting,
+            horizontalBrb,
+            verticalStarting,
+            verticalBrb
         };
 
         var missing = required.FirstOrDefault(path => !File.Exists(path));
@@ -129,14 +183,20 @@ public sealed class ObsService
             "Minimal Stream Frame",
             avatarDirectory,
             horizontalFrame,
-            showDpsPanel);
+            horizontalStarting,
+            horizontalBrb,
+            showDpsPanel,
+            vertical: false);
 
         ApplyThemeToCollection(
             Path.Combine(sceneRoot, "BPSR_TikTok_Vertical.json"),
             "TikTok Minimal Frame",
             avatarDirectory,
             verticalFrame,
-            showDpsPanel);
+            verticalStarting,
+            verticalBrb,
+            showDpsPanel,
+            vertical: true);
     }
 
     private static void ApplyThemeToCollection(
@@ -144,7 +204,10 @@ public sealed class ObsService
         string frameSourceName,
         string avatarDirectory,
         string frameFile,
-        bool showDpsPanel)
+        string startingScreen,
+        string brbScreen,
+        bool showDpsPanel,
+        bool vertical)
     {
         if (!File.Exists(file))
             throw new FileNotFoundException("The OBS scene collection is missing. Use Advanced → Repair once.", file);
@@ -175,16 +238,55 @@ public sealed class ObsService
         frame["settings"] = frameSettings;
         frameSettings["file"] = ObsPath(frameFile);
 
+        var starting = FindSource(sources, "Starting Screen")
+                       ?? throw new InvalidOperationException("The Starting Soon screen source is missing. Use Advanced → Repair once.");
+        var startingSettings = starting["settings"]?.AsObject() ?? new JsonObject();
+        starting["settings"] = startingSettings;
+        startingSettings["file"] = ObsPath(startingScreen);
+
+        var brb = FindSource(sources, "BRB Screen")
+                  ?? throw new InvalidOperationException("The BRB screen source is missing. Use Advanced → Repair once.");
+        var brbSettings = brb["settings"]?.AsObject() ?? new JsonObject();
+        brb["settings"] = brbSettings;
+        brbSettings["file"] = ObsPath(brbScreen);
+
         foreach (var scene in sources.OfType<JsonObject>().Where(x => string.Equals(x["id"]?.GetValue<string>(), "scene", StringComparison.Ordinal)))
         {
             var items = scene["settings"]?["items"]?.AsArray();
             if (items is null) continue;
 
-            foreach (var item in items.OfType<JsonObject>().Where(x => string.Equals(x["name"]?.GetValue<string>(), "DPS Panel", StringComparison.Ordinal)))
-                item["visible"] = showDpsPanel;
+            foreach (var item in items.OfType<JsonObject>())
+            {
+                var name = item["name"]?.GetValue<string>();
+
+                if (string.Equals(name, "DPS Panel", StringComparison.Ordinal))
+                    item["visible"] = showDpsPanel;
+
+                if (string.Equals(name, frameSourceName, StringComparison.Ordinal))
+                    SetSceneItemBox(item, 0, 0, vertical ? 1080 : 1920, vertical ? 1920 : 1080);
+
+                if (string.Equals(name, "FloodTuber Avatar", StringComparison.Ordinal))
+                {
+                    // A fixed bounding box makes Profile A and Profile B the same apparent size
+                    // even when their underlying PNG canvases have different pixel dimensions.
+                    SetSceneItemBox(item, 24, vertical ? 1380 : 580, vertical ? 430 : 420, vertical ? 520 : 490);
+                }
+            }
         }
 
         File.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+    }
+
+    private static void SetSceneItemBox(JsonObject item, double x, double y, double width, double height)
+    {
+        item["pos"] = new JsonObject { ["x"] = x, ["y"] = y };
+        item["scale"] = new JsonObject { ["x"] = 1.0, ["y"] = 1.0 };
+        item["align"] = 5;
+        item["bounds_type"] = 2;
+        item["bounds_align"] = 5;
+        item["bounds_crop"] = false;
+        item["bounds"] = new JsonObject { ["x"] = width, ["y"] = height };
+        item["scale_filter"] = "lanczos";
     }
 
     private static JsonObject? FindSource(JsonArray sources, string name)
