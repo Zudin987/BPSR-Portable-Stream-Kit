@@ -19,8 +19,9 @@ public sealed class ObsCrashRecoveryService
             if (string.IsNullOrWhiteSpace(expectedExe)) return false;
             var expectedPath = Path.GetFullPath(expectedExe);
 
-            EnumWindows((hwnd, _) =>
+            EnumWindows((hwnd, unused) =>
             {
+                _ = unused;
                 try
                 {
                     if (!IsWindowVisible(hwnd)) return true;
