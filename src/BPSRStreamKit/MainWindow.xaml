@@ -6,7 +6,7 @@
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BgBrush}" Foreground="{StaticResource TextBrush}"
         FontFamily="Segoe UI Variable Text, Segoe UI"
-        Loaded="Window_Loaded" SourceInitialized="Window_SourceInitialized">
+        Loaded="Window_Loaded" SourceInitialized="Window_SourceInitialized" Closing="Window_Closing">
     <Grid>
         <Ellipse Width="520" Height="520" Fill="#211E4C" Opacity="0.18" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-250,-160,0" IsHitTestVisible="False">
             <Ellipse.Effect><BlurEffect Radius="95"/></Ellipse.Effect>
@@ -19,24 +19,31 @@
             <StackPanel Margin="32,28,32,30">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" MinWidth="0">
                         <Border Width="50" Height="50" CornerRadius="16" Background="#171C27" BorderBrush="#3A4354" BorderThickness="1" Padding="4">
                             <Image Source="Assets/AppIcon.ico" Stretch="Uniform"/>
                         </Border>
-                        <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                        <StackPanel Margin="14,0,16,0" VerticalAlignment="Center" MinWidth="0">
                             <TextBlock Text="StreamKit" FontSize="22" FontWeight="SemiBold"/>
-                            <TextBlock Text="Three steps. No streaming software knowledge needed." FontSize="12" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/>
+                            <TextBlock x:Name="HeaderSubtitle" Text="Three steps. No streaming software knowledge needed."
+                                       FontSize="12" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"
+                                       TextWrapping="Wrap"/>
                         </StackPanel>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Style="{StaticResource GhostButton}" Content="Refresh" Click="Refresh_Click" ToolTip="Check your game and setup again."/>
-                        <Button Style="{StaticResource GhostButton}" Content="Advanced settings" Click="Settings_Click" Margin="4,0,0,0" ToolTip="Technical tools are hidden here. You normally do not need them."/>
+                        <Button x:Name="QuickLaunchReturnButton" Style="{StaticResource GhostButton}" Content="Quick Launch" Click="QuickLaunch_Click"
+                                Visibility="Collapsed" Margin="4,0,0,0" ToolTip="Return to the compact saved-setup view."/>
+                        <Button Style="{StaticResource GhostButton}" Content="Advanced settings" Click="Settings_Click" Margin="4,0,0,0"
+                                ToolTip="Troubleshooting tools. You normally do not need these."/>
                     </StackPanel>
                 </Grid>
 
-                <TextBlock Text="GET READY IN 3 STEPS" Style="{StaticResource SectionLabel}" Margin="4,28,0,10"/>
+                <local:QuickLaunchCard x:Name="QuickLaunchPanel" xmlns:local="clr-namespace:BPSRStreamKit" Visibility="Collapsed"/>
 
-                <Grid>
+                <TextBlock x:Name="SetupSectionLabel" Text="GET READY IN 3 STEPS" Style="{StaticResource SectionLabel}" Margin="4,28,0,10"/>
+
+                <Grid x:Name="SetupGrid">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="1*"/><ColumnDefinition Width="14"/>
                         <ColumnDefinition Width="1*"/><ColumnDefinition Width="14"/>
@@ -44,77 +51,78 @@
                     </Grid.ColumnDefinitions>
 
                     <Border Grid.Column="0" Style="{StaticResource GlassCard}">
-                        <StackPanel>
+                        <StackPanel MinWidth="0">
                             <StackPanel Orientation="Horizontal">
                                 <Border Width="34" Height="34" CornerRadius="17" Background="#302238" BorderBrush="#68466D" BorderThickness="1">
                                     <TextBlock Text="1" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#F8B9D7"/>
                                 </Border>
-                                <StackPanel Margin="11,0,0,0">
+                                <StackPanel Margin="11,0,0,0" MinWidth="0">
                                     <TextBlock Text="Choose your game" FontSize="17" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Open the game first, then pick it here." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,0"/>
+                                    <TextBlock Text="Open the game first, then pick it here." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </StackPanel>
                             <ComboBox x:Name="GameCombo" DisplayMemberPath="DisplayName" Margin="0,18,0,0" SelectionChanged="GameCombo_SelectionChanged"
-                                      ToolTip="StreamKit only captures the game you choose here — not your whole desktop."/>
+                                      ToolTip="StreamKit captures only the selected game, not your whole desktop."/>
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock x:Name="GameLayoutText" Text="Waiting for a running game" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"/>
-                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="Find games" Click="ScanGames_Click" MinWidth="92"
+                                <TextBlock x:Name="GameLayoutText" Text="Waiting for a running game" VerticalAlignment="Center" FontSize="11"
+                                           Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,8,0"/>
+                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="Find games" Click="ScanGames_Click" MinWidth="88"
                                         ToolTip="Refresh the list if you just opened or restarted a game."/>
                             </Grid>
                         </StackPanel>
                     </Border>
 
                     <Border Grid.Column="2" Style="{StaticResource GlassCard}">
-                        <StackPanel>
+                        <StackPanel MinWidth="0">
                             <StackPanel Orientation="Horizontal">
                                 <Border Width="34" Height="34" CornerRadius="17" Background="#25283E" BorderBrush="#4E537E" BorderThickness="1">
                                     <TextBlock Text="2" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#C9C5FF"/>
                                 </Border>
-                                <StackPanel Margin="11,0,0,0">
+                                <StackPanel Margin="11,0,0,0" MinWidth="0">
                                     <TextBlock Text="Choose your avatar" FontSize="17" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Face-tracked VTuber is the recommended default." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,0"/>
+                                    <TextBlock Text="Face-tracked VTuber is the recommended default." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </StackPanel>
                             <ComboBox x:Name="AvatarCombo" DisplayMemberPath="DisplayName" Margin="0,18,0,0" SelectionChanged="AvatarCombo_SelectionChanged"
-                                      ToolTip="Full VTuber follows your face. Simple Talking Avatar works without a webcam. No Avatar shows only the game."/>
-                            <TextBlock x:Name="AvatarDetailText" Text="Face-tracked Live2D avatar" Margin="2,8,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                                      ToolTip="Full VTuber follows your face. Simple Talking Avatar works without a webcam."/>
+                            <TextBlock x:Name="AvatarDetailText" Text="Face-tracked Live2D avatar" Margin="2,8,0,0" FontSize="11"
+                                       Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
                             <Grid Margin="0,14,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <StackPanel>
+                                <StackPanel MinWidth="0">
                                     <TextBlock Text="Frame style" FontSize="10" Foreground="#7E8798"/>
-                                    <ComboBox x:Name="ThemeCombo" DisplayMemberPath="DisplayName" Margin="0,5,8,0" Height="42" SelectionChanged="ThemeCombo_SelectionChanged"
-                                              ToolTip="This only changes the decorative border and starting/BRB screens."/>
+                                    <ComboBox x:Name="ThemeCombo" DisplayMemberPath="DisplayName" Margin="0,5,8,0" Height="42" SelectionChanged="ThemeCombo_SelectionChanged"/>
                                 </StackPanel>
-                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="Avatar help" Click="AvatarHelp_Click" VerticalAlignment="Bottom" MinWidth="88"
-                                        ToolTip="Show the one-time VTube Studio setup guide."/>
+                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="Avatar help" Click="AvatarHelp_Click"
+                                        VerticalAlignment="Bottom" MinWidth="88"/>
                             </Grid>
                         </StackPanel>
                     </Border>
 
                     <Border Grid.Column="4" Background="{StaticResource HeroGradient}" BorderBrush="#4A3C53" BorderThickness="1" CornerRadius="20" Padding="22">
-                        <StackPanel>
+                        <StackPanel MinWidth="0">
                             <StackPanel Orientation="Horizontal">
                                 <Border Width="34" Height="34" CornerRadius="17" Background="#1D372D" BorderBrush="#3F745D" BorderThickness="1">
                                     <TextBlock Text="3" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#A7EAC8"/>
                                 </Border>
-                                <StackPanel Margin="11,0,0,0">
+                                <StackPanel Margin="11,0,0,0" MinWidth="0">
                                     <TextBlock Text="Go live" FontSize="17" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Choose where. StreamKit handles the rest." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,0"/>
+                                    <TextBlock Text="Choose where. StreamKit handles the rest." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </StackPanel>
 
                             <TextBlock Text="Where do you want to share?" FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,17,0,7"/>
                             <UniformGrid Columns="2">
-                                <Button x:Name="DiscordOnlySegment" Style="{StaticResource ChoiceButton}" Content="Discord only" Click="DiscordOnlySegment_Click" Margin="0,0,5,0"
-                                        ToolTip="Best for sharing with friends. Game sound is included and your voice is not doubled."/>
-                                <Button x:Name="AllPlatformsSegment" Style="{StaticResource ChoiceButton}" Content="Discord + Twitch + TikTok" Click="AllPlatformsSegment_Click" Margin="5,0,0,0" FontSize="11"
-                                        ToolTip="Use this when you also want to broadcast publicly to Twitch and TikTok."/>
+                                <Button x:Name="DiscordOnlySegment" Style="{StaticResource ChoiceButton}" Content="Discord only" Click="DiscordOnlySegment_Click" Margin="0,0,5,0"/>
+                                <Button x:Name="AllPlatformsSegment" Style="{StaticResource ChoiceButton}" Content="Discord + Twitch (+ TikTok)" Click="AllPlatformsSegment_Click" Margin="5,0,0,0" FontSize="11"/>
                             </UniformGrid>
 
-                            <Button x:Name="MainActionButton" Style="{StaticResource PrimaryButton}" Content="Start Discord Share" Margin="0,16,0,0" Click="MainAction_Click"
-                                    ToolTip="StreamKit prepares the avatar, sound, scene and sharing window automatically."/>
-                            <TextBlock x:Name="ActionHint" Text="You will share one clean StreamKit window in Discord." Margin="3,9,3,0" FontSize="11" Foreground="#BCC4D3" TextWrapping="Wrap" TextAlignment="Center"/>
+                            <Button x:Name="MainActionButton" Style="{StaticResource PrimaryButton}" Content="Start Discord Share" Margin="0,16,0,0" Click="MainAction_Click"/>
+                            <TextBlock x:Name="ActionHint" Text="You will share one clean StreamKit window in Discord." Margin="3,9,3,0" FontSize="11"
+                                       Foreground="#BCC4D3" TextWrapping="Wrap" TextAlignment="Center"/>
+                            <Button x:Name="TikTokSetupShortcut" Style="{StaticResource GhostButton}" Content="Add TikTok later" Click="ShowTikTokSetup_Click"
+                                    Visibility="Collapsed" Margin="0,7,0,0" ToolTip="Open the optional vertical TikTok setup."/>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -122,13 +130,15 @@
                 <Border x:Name="ProblemPanel" Visibility="Collapsed" Margin="0,16,0,0" Background="#24171B" BorderBrush="#73404A" BorderThickness="1" CornerRadius="16" Padding="18">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <Border Width="34" Height="34" CornerRadius="10" Background="#4B252D"><TextBlock Text="!" FontSize="17" FontWeight="Bold" Foreground="#FFD2D6" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
-                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                            <TextBlock x:Name="ProblemTitle" Text="Something needs attention" FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="ProblemText" Text="StreamKit will explain what to do here." FontSize="11" Foreground="#D5B5BA" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                        <Border Width="34" Height="34" CornerRadius="10" Background="#4B252D">
+                            <TextBlock Text="!" FontSize="17" FontWeight="Bold" Foreground="#FFD2D6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="0">
+                            <TextBlock x:Name="ProblemTitle" Text="Something needs attention" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="ProblemText" Text="StreamKit will explain what to do here." FontSize="11" Foreground="#D5B5BA" Margin="0,3,12,0" TextWrapping="Wrap"/>
                         </StackPanel>
                         <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Style="{StaticResource SecondaryButton}" Content="Fix setup" Click="Repair_Click" Height="40" MinWidth="92"/>
+                            <Button x:Name="ProblemActionButton" Style="{StaticResource SecondaryButton}" Content="Fix setup" Click="ProblemAction_Click" Height="40" MinWidth="92"/>
                             <Button Style="{StaticResource GhostButton}" Content="Dismiss" Click="DismissProblem_Click" Margin="4,0,0,0" MinWidth="76"/>
                         </StackPanel>
                     </Grid>
@@ -136,22 +146,20 @@
 
                 <Border x:Name="AvatarSetupPanel" Visibility="Collapsed" Margin="0,16,0,0" Background="#17172A" BorderBrush="#54507E" BorderThickness="1" CornerRadius="18" Padding="20">
                     <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions>
-                        <StackPanel>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="244"/></Grid.ColumnDefinitions>
+                        <StackPanel MinWidth="0">
                             <TextBlock Text="ONE-TIME AVATAR SETUP" Style="{StaticResource SectionLabel}" Foreground="#B9B5E8"/>
-                            <TextBlock Text="Make your VTube Studio avatar appear" FontSize="18" FontWeight="SemiBold" Margin="0,6,0,0"/>
-                            <TextBlock Text="Set these once in VTube Studio. StreamKit handles the OBS side automatically." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,12"/>
-                            <TextBlock Text="1   Open VTube Studio settings and turn on the output switch named ‘Spout2 output’." FontSize="12" Margin="0,5,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="2   Open Backgrounds → Color Picker Background → turn on ‘Transparent in capture’." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="3   For face movement, turn on camera tracking and calibrate while looking forward." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="4   Camera tracking already drives the mouth. Microphone lipsync is optional; enable Advanced Lipsync if you want voice-driven mouth movement." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="5   Keep VTube Studio open, then click Check my avatar. You no longer need a game running just to test the avatar." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="Technical names are shown only because they match the labels inside VTube Studio." FontSize="10" Foreground="#7F87A0" Margin="0,10,0,0"/>
+                            <TextBlock Text="Make your VTube Studio avatar appear" FontSize="18" FontWeight="SemiBold" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="Set these once in VTube Studio. StreamKit handles the OBS side automatically." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,12" TextWrapping="Wrap"/>
+                            <TextBlock Text="1   Turn on Spout2 output in VTube Studio." FontSize="12" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="2   Backgrounds → Color Picker Background → enable Transparent in capture." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="3   Turn on camera tracking and calibrate while looking forward." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="4   Keep VTube Studio open, then click Check my avatar. A game is not required for this test." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
-                        <Border Grid.Column="2" Background="#10131D" BorderBrush="#343A52" BorderThickness="1" CornerRadius="14" Padding="16">
+                        <Border Grid.Column="2" Background="#10131D" BorderBrush="#343A52" BorderThickness="1" CornerRadius="14" Padding="15">
                             <StackPanel VerticalAlignment="Center">
-                                <Button Style="{StaticResource SecondaryButton}" Content="Open VTube Studio" Click="OpenVTubeStudio_Click" ToolTip="Open the avatar app through Steam."/>
-                                <Button x:Name="CheckAvatarButton" Style="{StaticResource PrimaryButton}" Content="Check my avatar" Height="52" Margin="0,10,0,0" Click="CheckAvatarV204_Click"/>
+                                <Button Style="{StaticResource SecondaryButton}" Content="Open VTube Studio" Click="OpenVTubeStudio_Click"/>
+                                <Button x:Name="CheckAvatarButton" Style="{StaticResource PrimaryButton}" Content="Check my avatar" Height="52" MinWidth="0" FontSize="13" Margin="0,10,0,0" Click="CheckAvatar_Click"/>
                                 <TextBlock x:Name="AvatarCheckText" Text="StreamKit will test the avatar automatically." FontSize="10" Foreground="{StaticResource MutedBrush}" Margin="2,9,2,0" TextWrapping="Wrap" TextAlignment="Center"/>
                             </StackPanel>
                         </Border>
@@ -160,20 +168,20 @@
 
                 <Border x:Name="PlatformSetupPanel" Visibility="Collapsed" Margin="0,16,0,0" Background="#15211E" BorderBrush="#365A4B" BorderThickness="1" CornerRadius="18" Padding="20">
                     <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock Text="ONE-TIME TWITCH + TIKTOK SETUP" Style="{StaticResource SectionLabel}" Foreground="#A8D8C3"/>
-                            <TextBlock Text="Connect your two streaming accounts once" FontSize="18" FontWeight="SemiBold" Margin="0,6,0,0"/>
-                            <TextBlock Text="You do not need to understand the streaming engine. Follow these exact clicks, then come back here." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,12"/>
-                            <TextBlock Text="Twitch   Settings → Stream → Service: Twitch → Connect Account." FontSize="12" Margin="0,5,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="TikTok   Open the TikTok output helper → Outputs → Add Stream → choose Vertical → paste the server/key TikTok gives you." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="After this first setup, StreamKit starts both automatically and keeps Discord friends out of the public stream audio." FontSize="11" Foreground="#A9C8BA" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="244"/></Grid.ColumnDefinitions>
+                        <StackPanel MinWidth="0">
+                            <TextBlock Text="OPTIONAL TIKTOK SETUP" Style="{StaticResource SectionLabel}" Foreground="#A8D8C3"/>
+                            <TextBlock Text="Add TikTok whenever your account gets a stream key" FontSize="18" FontWeight="SemiBold" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="Discord + Twitch work without this. StreamKit installs the vertical helper only when you open this setup." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,12" TextWrapping="Wrap"/>
+                            <TextBlock Text="1   Click Open TikTok setup. StreamKit opens its portable streaming engine once." FontSize="12" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="2   In Aitum Outputs, add a Stream on the Vertical canvas and paste TikTok's server + stream key." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="3   Return here and click Check TikTok. If it is still missing, nothing else is blocked." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
-                        <Border Grid.Column="2" Background="#0F1715" BorderBrush="#2F4B40" BorderThickness="1" CornerRadius="14" Padding="16">
+                        <Border Grid.Column="2" Background="#0F1715" BorderBrush="#2F4B40" BorderThickness="1" CornerRadius="14" Padding="15">
                             <StackPanel VerticalAlignment="Center">
-                                <Button Style="{StaticResource SecondaryButton}" Content="Open account setup" Click="OpenStreamingSetup_Click" ToolTip="Opens the streaming engine only for this one-time account connection."/>
-                                <Button Style="{StaticResource PrimaryButton}" Content="I’m finished" Height="52" Margin="0,10,0,0" Click="PlatformSetupDone_Click"/>
-                                <TextBlock Text="StreamKit will close the setup window and use these accounts next time." FontSize="10" Foreground="{StaticResource MutedBrush}" Margin="2,9,2,0" TextWrapping="Wrap" TextAlignment="Center"/>
+                                <Button Style="{StaticResource SecondaryButton}" Content="Open TikTok setup" Click="OpenStreamingSetup_Click"/>
+                                <Button Style="{StaticResource PrimaryButton}" Content="Check TikTok" Height="52" MinWidth="0" FontSize="13" Margin="0,10,0,0" Click="CheckTikTok_Click"/>
+                                <TextBlock Text="Your Twitch/Discord setup remains usable even if this check fails." FontSize="10" Foreground="{StaticResource MutedBrush}" Margin="2,9,2,0" TextWrapping="Wrap" TextAlignment="Center"/>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -182,41 +190,43 @@
                 <Border Margin="0,16,0,0" Style="{StaticResource GlassCard}" Padding="24" Background="#C812151D">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="0.85*"/></Grid.ColumnDefinitions>
-                        <StackPanel>
+                        <StackPanel MinWidth="0">
                             <TextBlock x:Name="HeroEyebrow" Text="READY" Style="{StaticResource SectionLabel}" Foreground="{StaticResource GoodBrush}"/>
-                            <TextBlock x:Name="HeroTitle" Text="Ready to share" FontSize="25" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                            <TextBlock x:Name="HeroTitle" Text="Ready to share" FontSize="25" FontWeight="SemiBold" Margin="0,6,0,0" TextWrapping="Wrap"/>
                             <TextBlock x:Name="HeroSubtitle" Text="StreamKit takes care of the technical setup for you." FontSize="12" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0" TextWrapping="Wrap" LineHeight="18"/>
 
                             <StackPanel x:Name="SetupProgressPanel" Visibility="Collapsed" Margin="0,15,0,0">
                                 <ProgressBar x:Name="SetupProgress" Minimum="0" Maximum="100"/>
-                                <TextBlock x:Name="SetupStatusText" Text="Preparing…" FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,7,0,0"/>
+                                <TextBlock x:Name="SetupStatusText" Text="Preparing…" FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,7,0,0" TextWrapping="Wrap"/>
                             </StackPanel>
 
-                            <Border x:Name="StreamControlsPanel" Visibility="Collapsed" Margin="0,16,0,0" Background="#10141C" BorderBrush="#303746" BorderThickness="1" CornerRadius="14" Padding="12">
+                            <Border x:Name="SceneControlsPanel" Visibility="Collapsed" Margin="0,16,0,0" Background="#10141C" BorderBrush="#303746" BorderThickness="1" CornerRadius="14" Padding="12">
                                 <StackPanel>
-                                    <TextBlock Text="LIVE CONTROLS" Style="{StaticResource SectionLabel}"/>
+                                    <TextBlock Text="SCENE CONTROLS" Style="{StaticResource SectionLabel}"/>
                                     <UniformGrid Columns="4" Margin="0,8,0,0">
-                                        <Button x:Name="StartingSoonButton" Style="{StaticResource SecondaryButton}" Content="Starting Soon" Click="StartingSoon_Click" Margin="3" Height="40" MinWidth="0" Padding="6,0" ToolTip="Show your Starting Soon screen everywhere."/>
-                                        <Button x:Name="LiveButton" Style="{StaticResource SecondaryButton}" Content="Live" Click="Live_Click" Margin="3" Height="40" MinWidth="0" Padding="6,0" ToolTip="Return to the game + avatar view."/>
-                                        <Button x:Name="BrbButton" Style="{StaticResource SecondaryButton}" Content="BRB" Click="Brb_Click" Margin="3" Height="40" MinWidth="0" Padding="6,0" ToolTip="Show the Be Right Back screen everywhere."/>
-                                        <Button x:Name="MicMuteButton" Style="{StaticResource SecondaryButton}" Content="Mute Mic" Click="MicMute_Click" Margin="3" Height="40" MinWidth="0" Padding="6,0" ToolTip="Mute your public-stream microphone. Discord keeps using your normal Discord mic."/>
+                                        <Button x:Name="StartingSoonButton" Style="{StaticResource SecondaryButton}" Content="Starting Soon" Click="StartingSoon_Click" Margin="3" Height="40" MinWidth="0" Padding="5,0" FontSize="11"/>
+                                        <Button x:Name="BrbButton" Style="{StaticResource SecondaryButton}" Content="BRB" Click="Brb_Click" Margin="3" Height="40" MinWidth="0" Padding="5,0"/>
+                                        <Button x:Name="GameCleanButton" Style="{StaticResource SecondaryButton}" Content="Game Clean" Click="GameClean_Click" Margin="3" Height="40" MinWidth="0" Padding="5,0" FontSize="11"/>
+                                        <Button x:Name="BpsrButton" Style="{StaticResource SecondaryButton}" Content="BPSR" Click="Bpsr_Click" Margin="3" Height="40" MinWidth="0" Padding="5,0"/>
                                     </UniformGrid>
                                     <Grid Margin="3,10,3,0">
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                        <TextBlock Text="You can leave the streaming engine minimized." FontSize="10" Foreground="#7F8899" VerticalAlignment="Center"/>
-                                        <Button Grid.Column="1" x:Name="StopStreamButton" Style="{StaticResource GhostButton}" Content="Stop everything" Click="StopStream_Click" Foreground="{StaticResource BadBrush}" MinWidth="104" ToolTip="Stop sharing/streams and close StreamKit’s portable streaming engine."/>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="SceneControlHint" Text="These scenes switch every active view together." FontSize="10" Foreground="#7F8899" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,8,0"/>
+                                        <Button Grid.Column="1" x:Name="MicMuteButton" Style="{StaticResource GhostButton}" Content="Mute Mic" Click="MicMute_Click" Height="36" MinWidth="100" Margin="0,0,6,0"/>
+                                        <Button Grid.Column="2" x:Name="StopStreamButton" Style="{StaticResource GhostButton}" Content="Stop everything" Click="StopStream_Click" Foreground="{StaticResource BadBrush}" MinWidth="112"/>
                                     </Grid>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
 
                         <Border Grid.Column="2" Background="#0E1219" BorderBrush="#28303D" BorderThickness="1" CornerRadius="15" Padding="17">
-                            <StackPanel>
+                            <StackPanel MinWidth="0">
                                 <TextBlock Text="QUICK CHECK" Style="{StaticResource SectionLabel}" Margin="0,0,0,10"/>
-                                <Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Ellipse x:Name="GameStatusDot" Width="8" Height="8"/><TextBlock x:Name="GameStatusText" Grid.Column="1" FontSize="12" Text="Game ready"/></Grid>
-                                <Grid Margin="0,9,0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Ellipse x:Name="ObsStatusDot" Width="8" Height="8"/><TextBlock x:Name="ObsStatusText" Grid.Column="1" FontSize="12" Text="Streaming tools ready"/></Grid>
-                                <Grid Margin="0,9,0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Ellipse x:Name="AvatarStatusDot" Width="8" Height="8"/><TextBlock x:Name="AvatarStatusText" Grid.Column="1" FontSize="12" Text="Avatar ready"/></Grid>
+                                <Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Ellipse x:Name="GameStatusDot" Width="8" Height="8"/><TextBlock x:Name="GameStatusText" Grid.Column="1" FontSize="12" Text="Game ready" TextWrapping="Wrap"/></Grid>
+                                <Grid Margin="0,9,0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Ellipse x:Name="ObsStatusDot" Width="8" Height="8"/><TextBlock x:Name="ObsStatusText" Grid.Column="1" FontSize="12" Text="Streaming tools ready" TextWrapping="Wrap"/></Grid>
+                                <Grid Margin="0,9,0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Ellipse x:Name="AvatarStatusDot" Width="8" Height="8"/><TextBlock x:Name="AvatarStatusText" Grid.Column="1" FontSize="12" Text="Avatar ready" TextWrapping="Wrap"/></Grid>
                                 <Grid Margin="0,9,0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Ellipse x:Name="AudioStatusDot" Width="8" Height="8"/><TextBlock x:Name="AudioStatusText" Grid.Column="1" FontSize="12" Text="Sound protected" TextWrapping="Wrap"/></Grid>
+                                <Grid x:Name="TikTokStatusRow" Margin="0,9,0,4" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Ellipse x:Name="TikTokStatusDot" Width="8" Height="8"/><TextBlock x:Name="TikTokStatusText" Grid.Column="1" FontSize="12" Text="TikTok optional" TextWrapping="Wrap"/></Grid>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -226,38 +236,33 @@
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="36"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                         <Border Width="36" Height="36" CornerRadius="11" Background="#173127"><TextBlock Text="✓" FontSize="17" FontWeight="Bold" Foreground="{StaticResource GoodBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="Your sound is protected automatically" FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="PrivacyText" Text="Discord gets the game sound without doubling your microphone. Twitch/TikTok get the game + your cleaned microphone, while Discord friends and desktop notification sounds stay out." FontSize="11" Foreground="#A3B9AF" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                        <StackPanel Grid.Column="2" MinWidth="0">
+                            <TextBlock Text="Your sound is protected automatically" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="PrivacyText" Text="Discord gets the selected game sound without doubling your microphone." FontSize="11" Foreground="#A3B9AF" Margin="0,3,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Grid>
                 </Border>
 
                 <Border x:Name="AdvancedPanel" Visibility="Collapsed" Margin="0,14,0,0" Background="#E9141821" BorderBrush="#364052" BorderThickness="1" CornerRadius="18" Padding="20">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="Advanced settings" FontSize="15" FontWeight="SemiBold"/>
-                                <TextBlock Text="Technical tools for troubleshooting. You normally do not need anything here." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Button Style="{StaticResource SecondaryButton}" Content="Open avatar app" Click="OpenVTubeStudio_Click" MinWidth="116" ToolTip="Opens VTube Studio through Steam."/>
-                                <Button Style="{StaticResource SecondaryButton}" Content="Open streaming engine" Click="OpenObs_Click" Margin="8,0,0,0" MinWidth="142" ToolTip="Opens portable OBS. Only use this for account setup or troubleshooting."/>
-                                <Button Style="{StaticResource SecondaryButton}" Content="Open folder" Click="OpenFolder_Click" Margin="8,0,0,0" MinWidth="104"/>
-                                <Button Style="{StaticResource SecondaryButton}" Content="Fix setup" Click="Repair_Click" Margin="8,0,0,0" MinWidth="100" ToolTip="Re-check missing components while keeping local account settings."/>
-                            </StackPanel>
-                        </Grid>
+                    <StackPanel MinWidth="0">
+                        <TextBlock Text="Advanced settings" FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="Troubleshooting tools. You normally do not need anything here." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,12" TextWrapping="Wrap"/>
+                        <UniformGrid Columns="4">
+                            <Button Style="{StaticResource SecondaryButton}" Content="Open avatar app" Click="OpenVTubeStudio_Click" Margin="0,0,5,0" MinWidth="0"/>
+                            <Button Style="{StaticResource SecondaryButton}" Content="Open streaming engine" Click="OpenObs_Click" Margin="5,0" MinWidth="0"/>
+                            <Button Style="{StaticResource SecondaryButton}" Content="Open folder" Click="OpenFolder_Click" Margin="5,0" MinWidth="0"/>
+                            <Button Style="{StaticResource SecondaryButton}" Content="Fix setup" Click="Repair_Click" Margin="5,0,0,0" MinWidth="0"/>
+                        </UniformGrid>
                         <Border Background="#0D1118" BorderBrush="#29303D" BorderThickness="1" CornerRadius="12" Padding="13" Margin="0,14,0,0">
-                            <TextBlock Text="Technical details: portable OBS 1080p horizontal + 1080×1920 vertical output · VTube Studio transparent capture · private app-only audio routing · built-in microphone noise suppression · local automation connection. OBS self-updates remain disabled so the tested plugin bundle stays compatible." FontSize="10" Foreground="#7E8798" TextWrapping="Wrap"/>
+                            <TextBlock Text="Portable OBS · private selected-game audio · VTube Studio Spout capture · optional Aitum vertical output · local authenticated automation. StreamKit keeps OBS/plugins pinned as one tested bundle." FontSize="10" Foreground="#7E8798" TextWrapping="Wrap"/>
                         </Border>
                     </StackPanel>
                 </Border>
 
                 <Grid Margin="4,15,4,0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBlock x:Name="FooterStatus" Text="Ready when you are" FontSize="10" Foreground="#737C8E"/>
-                    <TextBlock Grid.Column="1" Text="v2.0.4" FontSize="10" Foreground="#737C8E"/>
+                    <TextBlock x:Name="FooterStatus" Text="Ready when you are" FontSize="10" Foreground="#737C8E" TextTrimming="CharacterEllipsis" Margin="0,0,12,0"/>
+                    <TextBlock x:Name="VersionText" Grid.Column="1" Text="v2.3.0" FontSize="10" Foreground="#737C8E"/>
                 </Grid>
             </StackPanel>
         </ScrollViewer>
