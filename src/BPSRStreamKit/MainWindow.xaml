@@ -140,10 +140,12 @@
                         <StackPanel>
                             <TextBlock Text="ONE-TIME AVATAR SETUP" Style="{StaticResource SectionLabel}" Foreground="#B9B5E8"/>
                             <TextBlock Text="Make your VTube Studio avatar appear" FontSize="18" FontWeight="SemiBold" Margin="0,6,0,0"/>
-                            <TextBlock Text="Do these three things in VTube Studio. You only need to do this once." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,12"/>
+                            <TextBlock Text="Set these once in VTube Studio. StreamKit handles the OBS side automatically." FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,12"/>
                             <TextBlock Text="1   Open VTube Studio settings and turn on the output switch named ‘Spout2 output’." FontSize="12" Margin="0,5,0,0" TextWrapping="Wrap"/>
                             <TextBlock Text="2   Open Backgrounds → Color Picker Background → turn on ‘Transparent in capture’." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="3   Keep VTube Studio open, then click Check my avatar." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="3   For face movement, turn on camera tracking and calibrate while looking forward." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="4   Camera tracking already drives the mouth. Microphone lipsync is optional; enable Advanced Lipsync if you want voice-driven mouth movement." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="5   Keep VTube Studio open, then click Check my avatar. You no longer need a game running just to test the avatar." FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
                             <TextBlock Text="Technical names are shown only because they match the labels inside VTube Studio." FontSize="10" Foreground="#7F87A0" Margin="0,10,0,0"/>
                         </StackPanel>
                         <Border Grid.Column="2" Background="#10131D" BorderBrush="#343A52" BorderThickness="1" CornerRadius="14" Padding="16">
@@ -255,7 +257,7 @@
                 <Grid Margin="4,15,4,0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock x:Name="FooterStatus" Text="Ready when you are" FontSize="10" Foreground="#737C8E"/>
-                    <TextBlock Grid.Column="1" Text="v2.0.3" FontSize="10" Foreground="#737C8E"/>
+                    <TextBlock Grid.Column="1" Text="v2.0.4" FontSize="10" Foreground="#737C8E"/>
                 </Grid>
             </StackPanel>
         </ScrollViewer>
