@@ -14,9 +14,7 @@ public static class FrameThemeService
 
     private const string RenderVersion = "v2.4.1-premium-2";
     private const string PreviewFileName = "Preview_640x360.png";
-
     private static readonly string SelectionFile = Path.Combine(AppPaths.Root, "user-data", "frame-theme-v2.txt");
-    // New cache generation is intentional: users who already selected a v2.4.0 theme must not keep old thin-box art.
     private static readonly string CacheRoot = Path.Combine(AppPaths.Root, "user-data", "frame-themes-v3");
 
     private static readonly (string RelativePath, bool Vertical, string? Title)[] Files =
@@ -150,7 +148,7 @@ public static class FrameThemeService
         using (var dc = visual.RenderOpen())
         {
             dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, width, height));
-            DrawPremiumFrame(dc, width, height, theme, strongBackdrop: false);
+            DrawPremiumFrame(dc, width, height, theme, false);
         }
         Save(path, visual, width, height);
     }
@@ -168,14 +166,13 @@ public static class FrameThemeService
             DrawGlow(dc, new Point(width * 0.72, height * 0.28), width * 0.34, p.Accent, 72);
             DrawGlow(dc, new Point(width * 0.20, height * 0.78), width * 0.26, p.Secondary, 42);
 
-            // A deliberately abstract fake game view keeps the preview useful without pretending to be a real screenshot.
             dc.DrawRoundedRectangle(ColorBrush(p.Soft, 17), null, new Rect(width * 0.07, height * 0.12, width * 0.23, height * 0.055), 5, 5);
             dc.DrawRoundedRectangle(ColorBrush(p.Soft, 14), null, new Rect(width * 0.75, height * 0.10, width * 0.17, height * 0.19), 8, 8);
             for (var i = 0; i < 4; i++)
                 dc.DrawRoundedRectangle(ColorBrush(p.Soft, (byte)(12 + i * 3)), null,
                     new Rect(width * (0.35 + i * 0.055), height * 0.78, width * 0.043, height * 0.075), 5, 5);
 
-            DrawPremiumFrame(dc, width, height, theme, strongBackdrop: true);
+            DrawPremiumFrame(dc, width, height, theme, true);
 
             var chip = new Rect(width * 0.045, height * 0.82, width * 0.34, height * 0.105);
             dc.DrawRoundedRectangle(ColorBrush(p.Deep, 205), new Pen(ColorBrush(p.Accent, 135), 1.2), chip, 9, 9);
@@ -191,20 +188,17 @@ public static class FrameThemeService
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen())
         {
-            var background = new LinearGradientBrush(p.A, p.B, 28);
-            dc.DrawRectangle(background, null, new Rect(0, 0, width, height));
+            dc.DrawRectangle(new LinearGradientBrush(p.A, p.B, 28), null, new Rect(0, 0, width, height));
             DrawGlow(dc, new Point(width * 0.18, height * 0.18), Math.Min(width, height) * 0.62, p.Accent, 95);
             DrawGlow(dc, new Point(width * 0.82, height * 0.80), Math.Min(width, height) * 0.72, p.Secondary, 66);
             DrawAtmosphere(dc, width, height, p, theme.Key);
-            DrawPremiumFrame(dc, width, height, theme, strongBackdrop: true);
+            DrawPremiumFrame(dc, width, height, theme, true);
 
             var panelWidth = width * (width > height ? 0.56 : 0.76);
             var panelHeight = Math.Min(height * 0.25, panelWidth * 0.42);
             var panel = new Rect((width - panelWidth) / 2, (height - panelHeight) / 2, panelWidth, panelHeight);
-
             dc.DrawRoundedRectangle(ColorBrush(p.Deep, 198), new Pen(ColorBrush(p.Accent, 95), Math.Max(1.4, Math.Min(width, height) * 0.0014)), panel, 24, 24);
-            dc.DrawRoundedRectangle(null, new Pen(ColorBrush(p.Soft, 54), 1),
-                new Rect(panel.X + 8, panel.Y + 8, panel.Width - 16, panel.Height - 16), 19, 19);
+            dc.DrawRoundedRectangle(null, new Pen(ColorBrush(p.Soft, 54), 1), new Rect(panel.X + 8, panel.Y + 8, panel.Width - 16, panel.Height - 16), 19, 19);
 
             DrawScreenEmblem(dc, width / 2, panel.Y - Math.Min(width, height) * 0.055, Math.Min(width, height) * 0.028, theme.Key, p);
 
@@ -214,9 +208,7 @@ public static class FrameThemeService
             var titleY = panel.Y + panel.Height * 0.28 - heading.Height * 0.5;
             DrawTextShadow(dc, heading, new Point((width - heading.Width) / 2, titleY));
 
-            var subtitleValue = title.StartsWith("START", StringComparison.OrdinalIgnoreCase)
-                ? "PLEASE WAIT A MOMENT"
-                : "THANKS FOR WAITING";
+            var subtitleValue = title.StartsWith("START", StringComparison.OrdinalIgnoreCase) ? "PLEASE WAIT A MOMENT" : "THANKS FOR WAITING";
             var subtitle = FitText(subtitleValue, Math.Max(17, titleSize * 0.245), 13, titleMax,
                 ColorBrush(p.Secondary, 245), "Segoe UI Semibold");
             dc.DrawText(subtitle, new Point((width - subtitle.Width) / 2, titleY + heading.Height + Math.Max(14, titleSize * 0.12)));
@@ -227,8 +219,7 @@ public static class FrameThemeService
 
             var divider = Math.Min(panel.Width * 0.24, width * 0.18);
             dc.DrawLine(new Pen(ColorBrush(p.Accent, 100), 1.5),
-                new Point(width / 2 - divider / 2, panel.Bottom + 22),
-                new Point(width / 2 + divider / 2, panel.Bottom + 22));
+                new Point(width / 2 - divider / 2, panel.Bottom + 22), new Point(width / 2 + divider / 2, panel.Bottom + 22));
         }
         Save(path, visual, width, height);
     }
@@ -242,7 +233,6 @@ public static class FrameThemeService
         var radius = Math.Max(8.0, s * 0.012);
         var rect = new Rect(outer, outer, width - outer * 2, height - outer * 2);
 
-        // Multiple low-alpha strokes create depth/glow without making the usable center opaque.
         dc.DrawRoundedRectangle(null, new Pen(ColorBrush(p.Accent, strongBackdrop ? (byte)48 : (byte)36), Math.Max(7, s * 0.0105)), rect, radius, radius);
         dc.DrawRoundedRectangle(null, new Pen(ColorBrush(p.Secondary, 118), Math.Max(2.5, s * 0.0031)), rect, radius, radius);
         dc.DrawRoundedRectangle(null, new Pen(ColorBrush(p.Accent, 238), Math.Max(1.4, s * 0.0017)), rect, radius, radius);
@@ -278,8 +268,7 @@ public static class FrameThemeService
                 c.LineTo(new Point(x, y + sy * longEdge), true, false);
             }
             dc.DrawGeometry(fill, accent, g);
-            dc.DrawLine(second,
-                new Point(x + sx * shortEdge * 0.4, y + sy * shortEdge * 0.5),
+            dc.DrawLine(second, new Point(x + sx * shortEdge * 0.4, y + sy * shortEdge * 0.5),
                 new Point(x + sx * (longEdge * 0.74), y + sy * shortEdge * 0.5));
         }
 
@@ -334,7 +323,6 @@ public static class FrameThemeService
             c.LineTo(new Point(x + barWidth * 0.18, y + barHeight * 0.45), true, false);
         }
         dc.DrawGeometry(ColorBrush(p.Deep, 150), new Pen(ColorBrush(p.Accent, 155), Math.Max(1, s * 0.0011)), g);
-
         if (key == "black-gold")
             Diamond(dc, width / 2, y - barHeight * 0.55, Math.Max(5, s * 0.007), ColorBrush(p.Accent, 220), new Pen(ColorBrush(p.Secondary, 180), 1));
     }
@@ -355,51 +343,43 @@ public static class FrameThemeService
                 PetalCluster(dc, width * 0.89, height * 0.88, motif * 0.82, secondary, accent, 205);
                 DrawArcAccent(dc, width * 0.13, height * 0.12, motif * 3.1, p.Accent, 92, -12);
                 break;
-
             case "doctor":
                 DrawMedicalCross(dc, width * 0.89, height * 0.105, motif * 0.82, accent, ColorBrush(p.Deep, 200));
                 DrawHeartbeat(dc, width, height, new Pen(secondary, Math.Max(1.4, s * 0.0017)));
                 DrawPill(dc, width * 0.11, height * 0.87, motif * 1.15, -28, soft, pen);
                 break;
-
             case "neon-tech":
                 Circuit(dc, width, height, pen, secondary, 0.18);
                 Hex(dc, width * 0.87, height * 0.13, motif * 0.92, null, new Pen(secondary, Math.Max(1, s * 0.0012)));
                 Hex(dc, width * 0.13, height * 0.84, motif * 0.62, ColorBrush(p.Accent, 44), pen);
                 break;
-
             case "black-gold":
                 Diamond(dc, width * 0.5, height * 0.045, motif * 0.75, ColorBrush(p.Deep, 180), new Pen(accent, Math.Max(1.2, s * 0.0014)));
                 DrawLuxuryFan(dc, width * 0.10, height * 0.11, motif * 2.0, pen);
                 DrawLuxuryFan(dc, width * 0.90, height * 0.89, motif * 2.0, pen, 180);
                 break;
-
             case "crimson-demon":
                 Spikes(dc, width * 0.09, height * 0.11, motif * 1.65, accent);
                 Spikes(dc, width * 0.91, height * 0.89, motif * 1.45, secondary);
                 Slash(dc, width * 0.84, height * 0.12, motif * 2.2, -28, new Pen(accent, Math.Max(2, s * 0.0024)));
                 Slash(dc, width * 0.865, height * 0.135, motif * 1.55, -28, new Pen(soft, Math.Max(1.2, s * 0.0014)));
                 break;
-
             case "ice-crystal":
                 CrystalCluster(dc, width * 0.09, height * 0.11, motif * 1.25, accent, secondary);
                 CrystalCluster(dc, width * 0.91, height * 0.88, motif * 1.08, secondary, soft);
                 Star(dc, width * 0.18, height * 0.08, motif * 0.42, soft);
                 Star(dc, width * 0.82, height * 0.91, motif * 0.32, secondary);
                 break;
-
             case "forest-mystic":
                 DrawVine(dc, width * 0.09, height * 0.11, motif * 3.0, 28, pen, accent);
                 DrawVine(dc, width * 0.91, height * 0.88, motif * 2.6, 208, new Pen(secondary, pen.Thickness), secondary);
                 RuneRing(dc, width * 0.86, height * 0.15, motif * 1.05, soft, new Pen(accent, Math.Max(1, s * 0.0011)));
                 break;
-
             case "cyber-orange":
                 Circuit(dc, width, height, pen, secondary, 0.16);
                 DrawChevronStack(dc, width * 0.87, height * 0.13, motif * 1.2, accent, -1);
                 DrawChevronStack(dc, width * 0.13, height * 0.87, motif * 1.0, secondary, 1);
                 break;
-
             case "moonlight-silver":
                 Crescent(dc, width * 0.10, height * 0.12, motif * 1.25, accent);
                 Star(dc, width * 0.16, height * 0.08, motif * 0.50, secondary);
@@ -472,9 +452,8 @@ public static class FrameThemeService
 
     private static void DrawTextShadow(DrawingContext dc, FormattedText text, Point point)
     {
-        var shadowText = new FormattedText(text.Text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            text.Typeface, text.FontSize, ColorBrush(Colors.Black, 150), 1.0);
-        dc.DrawText(shadowText, new Point(point.X + 3, point.Y + 4));
+        var shadow = text.BuildGeometry(new Point(point.X + 3, point.Y + 4));
+        dc.DrawGeometry(ColorBrush(Colors.Black, 150), null, shadow);
         dc.DrawText(text, point);
     }
 
@@ -552,8 +531,7 @@ public static class FrameThemeService
     private static void DrawPill(DrawingContext dc, double x, double y, double size, double angle, Brush fill, Pen pen)
     {
         dc.PushTransform(new RotateTransform(angle, x, y));
-        var rect = new Rect(x - size, y - size * 0.38, size * 2, size * 0.76);
-        dc.DrawRoundedRectangle(fill, pen, rect, size * 0.38, size * 0.38);
+        dc.DrawRoundedRectangle(fill, pen, new Rect(x - size, y - size * 0.38, size * 2, size * 0.76), size * 0.38, size * 0.38);
         dc.DrawLine(pen, new Point(x, y - size * 0.34), new Point(x, y + size * 0.34));
         dc.Pop();
     }
@@ -687,9 +665,7 @@ public static class FrameThemeService
         for (var i = 0; i < 4; i++)
         {
             var a = i * 90 + 45;
-            var p1 = PointOnCircle(x, y, size * 0.74, a);
-            var p2 = PointOnCircle(x, y, size * 1.06, a);
-            dc.DrawLine(pen, p1, p2);
+            dc.DrawLine(pen, PointOnCircle(x, y, size * 0.74, a), PointOnCircle(x, y, size * 1.06, a));
         }
     }
 
@@ -714,8 +690,7 @@ public static class FrameThemeService
     {
         var outer = new EllipseGeometry(new Point(x, y), size, size);
         var inner = new EllipseGeometry(new Point(x + size * 0.38, y - size * 0.08), size * 0.88, size * 0.88);
-        var crescent = new CombinedGeometry(GeometryCombineMode.Exclude, outer, inner);
-        dc.DrawGeometry(fill, null, crescent);
+        dc.DrawGeometry(fill, null, new CombinedGeometry(GeometryCombineMode.Exclude, outer, inner));
     }
 
     private static void Star(DrawingContext dc, double x, double y, double size, Brush fill)
@@ -749,8 +724,7 @@ public static class FrameThemeService
         _ => new(C("#080B13"), C("#1A1E29"), C("#A7B8D6"), C("#DDE7F7"), C("#FFFFFF"), C("#05070B"))
     };
 
-    private static SolidColorBrush ColorBrush(Color color, byte alpha) =>
-        new(Color.FromArgb(alpha, color.R, color.G, color.B));
+    private static SolidColorBrush ColorBrush(Color color, byte alpha) => new(Color.FromArgb(alpha, color.R, color.G, color.B));
 
     private static Color Mix(Color a, Color b, double amount)
     {
