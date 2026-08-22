@@ -18,6 +18,14 @@ public partial class MainWindow : Window
     private sealed record ThemeChoice(StreamTheme Theme, string DisplayName, string Detail);
     private sealed record AvatarChoice(AvatarMode Mode, string DisplayName, string Detail);
 
+    private enum PendingObsPurpose
+    {
+        None,
+        DiscordShare,
+        PublicStream,
+        TikTokBootstrap
+    }
+
     private readonly DetectionService _detection = new();
     private readonly SetupService _setup = new();
     private readonly ObsService _obs = new();
@@ -64,6 +72,8 @@ public partial class MainWindow : Window
     private bool _returningUser;
     private bool _quickMode;
     private bool _allowClose;
+    private bool _recoveryPending;
+    private PendingObsPurpose _pendingObsPurpose;
     private Func<Task>? _problemAction;
 
     private GameTarget? SelectedGame => GameCombo.SelectedItem as GameTarget;
@@ -116,7 +126,7 @@ public partial class MainWindow : Window
         };
 
         var version = typeof(MainWindow).Assembly.GetName().Version;
-        VersionText.Text = version is null ? "v2.3.0" : $"v{version.Major}.{version.Minor}.{version.Build}";
+        VersionText.Text = version is null ? "v2.3.1" : $"v{version.Major}.{version.Minor}.{version.Build}";
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -152,7 +162,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_streamActive && !_sceneControlsReady && !_obsProcess.IsRunning())
+        if (!_streamActive && !_sceneControlsReady && !_recoveryPending && !_obsProcess.IsRunning())
         {
             _statusTimer.Stop();
             _obsRecoveryTimer.Stop();
@@ -194,6 +204,12 @@ public partial class MainWindow : Window
         _statusRefreshRunning = true;
         try
         {
+            if (_recoveryPending && !_obsProcess.IsRunning())
+            {
+                _recoveryPending = false;
+                _pendingObsPurpose = PendingObsPurpose.None;
+            }
+
             _lastDetection = await _detection.DetectAsync(SelectedGame);
             _lastAitum = _aitumState.Read();
             ApplyStatus(_lastDetection, _lastAitum);
@@ -280,6 +296,17 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_recoveryPending && _obsProcess.IsRunning())
+        {
+            HeroEyebrow.Text = "OBS IS OPEN";
+            HeroEyebrow.Foreground = (Brush)FindResource("WarnBrush");
+            HeroTitle.Text = "Your OBS session was kept running";
+            HeroSubtitle.Text = "StreamKit controls took longer than expected, but your game capture was not stopped. Wait a moment, then retry the controls on this same OBS session.";
+            MainActionButton.Content = "Retry StreamKit controls";
+            FooterStatus.Text = "OBS kept open · no duplicate launch · retry controls when ready";
+            return;
+        }
+
         var needsSetup = !state.ObsReady
                          || (_selectedAvatar == AvatarMode.VTubeStudio && !avatarToolsReady)
                          || (_selectedAvatar == AvatarMode.PngAvatar && !state.AvatarReady)
@@ -330,6 +357,18 @@ public partial class MainWindow : Window
     {
         if (_busy) return;
 
+        if (_recoveryPending)
+        {
+            if (_obsProcess.IsRunning())
+            {
+                await ResumeExistingSessionAsync();
+                return;
+            }
+
+            _recoveryPending = false;
+            _pendingObsPurpose = PendingObsPurpose.None;
+        }
+
         if (_streamActive)
         {
             try
@@ -375,7 +414,7 @@ public partial class MainWindow : Window
             if (_selectedAvatar == AvatarMode.VTubeStudio)
             {
                 ShowProgress("Waiting for VTube Studio to finish opening…");
-                vTubeTarget = await _vTubeStudio.LaunchAndWaitAsync(TimeSpan.FromSeconds(60));
+                vTubeTarget = await _vTubeStudio.LaunchAndWaitAsync(TimeSpan.FromSeconds(90));
                 ShowAvatarSetupGuide(force: !File.Exists(AvatarVerifiedFile));
             }
 
@@ -406,14 +445,29 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            if (!_streamActive && _obsProcess.IsRunning())
+            if (_obsProcess.IsRunning())
             {
-                try { await _obsProcess.CloseGracefullyAsync(TimeSpan.FromSeconds(12)); } catch { }
+                _recoveryPending = true;
+                RestorePortableObsWindow();
+                var actionLabel = _pendingObsPurpose == PendingObsPurpose.TikTokBootstrap
+                    ? "Retry TikTok layout"
+                    : "Retry controls";
+                ShowProblem(
+                    "OBS stayed open",
+                    $"{FriendlyError(ex)} StreamKit kept this OBS session running and will reuse the same copy when you retry.",
+                    actionLabel,
+                    ResumeExistingSessionAsync);
+                FooterStatus.Text = "OBS kept open · your game capture was not stopped";
             }
-            _sceneControlsReady = false;
-            _verticalScenesReady = false;
-            ShowProblemForException("StreamKit couldn’t finish automatically", ex, retry: StartAsync);
-            FooterStatus.Text = "Needs attention · your saved choices were kept";
+            else
+            {
+                _recoveryPending = false;
+                _pendingObsPurpose = PendingObsPurpose.None;
+                _sceneControlsReady = false;
+                _verticalScenesReady = false;
+                ShowProblemForException("StreamKit couldn’t finish automatically", ex, retry: StartAsync);
+                FooterStatus.Text = "Needs attention · your saved choices were kept";
+            }
         }
         finally
         {
@@ -426,29 +480,40 @@ public partial class MainWindow : Window
 
     private async Task StartDiscordOnlyAsync(GameTarget game, VTubeCaptureTarget? vTubeTarget)
     {
+        _pendingObsPurpose = PendingObsPurpose.DiscordShare;
         _obs.Launch(StreamMode.DiscordOnly, game, _selectedTheme, _selectedAvatar, vTubeTarget);
-        await WaitForStreamingEngineAsync(TimeSpan.FromSeconds(45));
+        await WaitForStreamingEngineAsync(TimeSpan.FromSeconds(75));
+        await CompleteDiscordOnlySessionAsync();
+    }
+
+    private async Task CompleteDiscordOnlySessionAsync()
+    {
         _sceneControlsReady = true;
         _verticalScenesReady = false;
         UpdateUiState();
 
-        await RunEngineStepWithRetryAsync(
+        var audioReady = await TryEngineStepAsync(
             () => _automation.ConfigureDiscordShareAudioAsync(alsoStreamingPlatforms: false),
             "Protecting your Discord audio…");
 
-        if (!await CheckAvatarConnectionAsync(TimeSpan.FromSeconds(55)))
-            throw new InvalidOperationException("Your avatar is still loading or not connected. Leave VTube Studio open, then use Check my avatar.");
+        var avatarReady = await CheckAvatarWithoutBlockingStartAsync(TimeSpan.FromSeconds(12));
 
-        await RunEngineStepWithRetryAsync(() => _automation.SetCurrentSceneAsync("Game Clean"), "Opening Game Clean…", 5);
+        await RunEngineStepWithRetryAsync(() => _automation.SetCurrentSceneAsync("Game Clean"), "Opening Game Clean…", 6);
         await SyncAvatarTransformsAsync(includeVertical: false);
-        await RunEngineStepWithRetryAsync(() => _automation.OpenProgramProjectorAsync(), "Opening your Discord share window…", 5);
+        await RunEngineStepWithRetryAsync(() => _automation.OpenProgramProjectorAsync(), "Opening your Discord share window…", 6);
         MinimizePortableObsWindow();
 
         _micMuted = true;
         _streamActive = true;
         _twitchStarted = false;
         _tiktokStarted = false;
+        _recoveryPending = false;
+        _pendingObsPurpose = PendingObsPurpose.None;
+        HideProblem();
+
         FooterStatus.Text = "Discord ready · Game Clean · share the projector window with sound";
+        if (!avatarReady) FooterStatus.Text += " · avatar still loading in VTube Studio";
+        if (!audioReady) FooterStatus.Text += " · audio controls may need a retry";
     }
 
     private async Task StartPublicModeAsync(GameTarget game, VTubeCaptureTarget? vTubeTarget, bool wantTikTok)
@@ -461,12 +526,14 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(verticalUuid))
             {
                 ShowProgress("Preparing the phone-shaped TikTok layout…");
+                _pendingObsPurpose = PendingObsPurpose.TikTokBootstrap;
                 _obs.LaunchAitumBootstrap(game, _selectedTheme, _selectedAvatar, vTubeTarget);
-                await WaitForStreamingEngineAsync(TimeSpan.FromSeconds(50));
+                await WaitForStreamingEngineAsync(TimeSpan.FromSeconds(75));
                 verticalUuid = await WaitForVerticalCanvasAsync(TimeSpan.FromSeconds(30));
                 if (string.IsNullOrWhiteSpace(verticalUuid))
                     throw new InvalidOperationException("TikTok’s vertical canvas could not be prepared. Open TikTok setup once and retry.");
                 await _obsProcess.CloseGracefullyAsync();
+                _pendingObsPurpose = PendingObsPurpose.None;
                 await Task.Delay(500);
             }
 
@@ -482,23 +549,27 @@ public partial class MainWindow : Window
         }
 
         AudioPrivacyService.HardenPortableObsConfig();
+        _pendingObsPurpose = PendingObsPurpose.PublicStream;
         _obs.Launch(StreamMode.AllPlatforms, game, _selectedTheme, _selectedAvatar, vTubeTarget);
-        await WaitForStreamingEngineAsync(TimeSpan.FromSeconds(50));
+        await WaitForStreamingEngineAsync(TimeSpan.FromSeconds(75));
+        await CompletePublicSessionAsync(wantTikTok && _verticalScenesReady);
+    }
+
+    private async Task CompletePublicSessionAsync(bool wantTikTok)
+    {
         _sceneControlsReady = true;
         UpdateUiState();
 
-        await RunEngineStepWithRetryAsync(
+        var audioReady = await TryEngineStepAsync(
             () => _automation.ConfigureDiscordShareAudioAsync(alsoStreamingPlatforms: true),
             "Protecting your public-stream audio…");
         await TryEngineStepAsync(() => _automation.StartVirtualCameraAsync(), "Preparing the optional Discord camera…");
 
-        if (!await CheckAvatarConnectionAsync(TimeSpan.FromSeconds(55)))
-            throw new InvalidOperationException("Your avatar is still loading or not connected. Leave VTube Studio open, then retry.");
-
+        var avatarReady = await CheckAvatarWithoutBlockingStartAsync(TimeSpan.FromSeconds(12));
         await SyncAvatarTransformsAsync(includeVertical: _verticalScenesReady);
-        await RunEngineStepWithRetryAsync(
+        var startingSceneReady = await TryEngineStepAsync(
             () => _automation.SwitchScenesAsync("Starting Soon", _verticalScenesReady ? "Vertical Starting Soon" : null),
-            "Preparing Starting Soon…", 5);
+            "Preparing Starting Soon…");
 
         _twitchStarted = false;
         _tiktokStarted = false;
@@ -534,20 +605,40 @@ public partial class MainWindow : Window
             catch (Exception ex) { publicStartError = ex; }
         }
 
-        await RunEngineStepWithRetryAsync(() => _automation.OpenProgramProjectorAsync(), "Opening your Discord share window…", 5);
-        MinimizePortableObsWindow();
-
         _micMuted = false;
         _streamActive = true;
+        _recoveryPending = false;
+        _pendingObsPurpose = PendingObsPurpose.None;
+
+        var projectorReady = await TryEngineStepAsync(
+            () => _automation.OpenProgramProjectorAsync(),
+            "Opening your Discord share window…");
+        if (projectorReady) MinimizePortableObsWindow();
+        else RestorePortableObsWindow();
 
         if (!_twitchStarted)
         {
             ShowProblem(
                 "Twitch is not connected yet",
-                "Discord is ready and all scene controls work. Open the streaming engine once, connect your Twitch account under Settings → Stream, then retry.",
+                "Discord/OBS stayed open and all scene controls remain available. Connect Twitch in portable OBS under Settings → Stream, then retry when ready.",
                 "Open streaming engine",
                 () => OpenObsForSetupAsync(needAitum: false));
-            FooterStatus.Text = "Discord ready · Twitch not connected · TikTok remains optional";
+            FooterStatus.Text = "OBS ready · Twitch not connected · TikTok remains optional";
+        }
+        else if (!projectorReady)
+        {
+            ShowProblem(
+                "Twitch is live · Discord share window is still connecting",
+                "Your public stream was not stopped. Use Reopen Discord share window after OBS finishes loading its controls.",
+                "Retry Discord window",
+                async () =>
+                {
+                    await RunEngineStepWithRetryAsync(() => _automation.OpenProgramProjectorAsync(), "Opening your Discord share window…", 6);
+                    MinimizePortableObsWindow();
+                });
+            FooterStatus.Text = _tiktokStarted
+                ? "Live · Twitch + TikTok · Discord window needs retry"
+                : "Live · Twitch · Discord window needs retry · TikTok optional";
         }
         else if (_tiktokStarted)
         {
@@ -560,7 +651,101 @@ public partial class MainWindow : Window
             FooterStatus.Text = "Live · Starting Soon · Discord + Twitch · TikTok optional";
         }
 
+        if (!avatarReady) FooterStatus.Text += " · avatar still loading";
+        if (!audioReady) FooterStatus.Text += " · audio controls may need retry";
+        if (!startingSceneReady) FooterStatus.Text += " · scene controls may need retry";
         _ = publicStartError;
+    }
+
+    private async Task ResumeExistingSessionAsync()
+    {
+        if (_busy) return;
+        if (!_obsProcess.IsRunning())
+        {
+            _recoveryPending = false;
+            _pendingObsPurpose = PendingObsPurpose.None;
+            await StartAsync();
+            return;
+        }
+
+        try
+        {
+            HideProblem();
+            SetBusy(true);
+            ShowProgress("Reconnecting StreamKit controls to the OBS window already open…");
+            if (!await _automation.WaitUntilReadyAsync(TimeSpan.FromSeconds(75)))
+                throw new InvalidOperationException("OBS is open, but StreamKit controls are still not responding yet.");
+
+            if (_pendingObsPurpose == PendingObsPurpose.TikTokBootstrap)
+            {
+                var verticalUuid = await WaitForVerticalCanvasAsync(TimeSpan.FromSeconds(25));
+                if (string.IsNullOrWhiteSpace(verticalUuid))
+                    throw new InvalidOperationException("TikTok’s vertical canvas is still being prepared. Leave OBS open and retry again in a moment.");
+
+                ShowProgress("TikTok layout is ready · restarting OBS once to load the final stream scenes…");
+                await _obsProcess.CloseGracefullyAsync();
+                _recoveryPending = false;
+                _pendingObsPurpose = PendingObsPurpose.None;
+                HideProgress();
+                SetBusy(false);
+                await StartAsync();
+                return;
+            }
+
+            if (_pendingObsPurpose == PendingObsPurpose.DiscordShare || _selectedMode == StreamMode.DiscordOnly)
+                await CompleteDiscordOnlySessionAsync();
+            else
+                await CompletePublicSessionAsync(_lastAitum.TikTokOutputConfigured && _verticalScenesReady);
+
+            MarkReturningUser();
+        }
+        catch (Exception ex)
+        {
+            _recoveryPending = _obsProcess.IsRunning();
+            if (_recoveryPending)
+            {
+                RestorePortableObsWindow();
+                ShowProblem(
+                    "OBS is still open",
+                    $"{FriendlyError(ex)} Nothing was closed. Wait a moment and retry controls on this same OBS session.",
+                    _pendingObsPurpose == PendingObsPurpose.TikTokBootstrap ? "Retry TikTok layout" : "Retry controls",
+                    ResumeExistingSessionAsync);
+                FooterStatus.Text = "OBS kept open · controls can be retried without restarting it";
+            }
+            else
+            {
+                _pendingObsPurpose = PendingObsPurpose.None;
+                ShowProblemForException("OBS closed before StreamKit could reconnect", ex, retry: StartAsync);
+            }
+        }
+        finally
+        {
+            HideProgress();
+            SetBusy(false);
+            UpdateUiState();
+            try { await RefreshStatusAsync(); } catch { }
+        }
+    }
+
+    private async Task<bool> CheckAvatarWithoutBlockingStartAsync(TimeSpan timeout)
+    {
+        if (_selectedAvatar != AvatarMode.VTubeStudio) return true;
+        try
+        {
+            var ready = await CheckAvatarConnectionAsync(timeout);
+            if (!ready)
+            {
+                AvatarSetupPanel.Visibility = Visibility.Visible;
+                AvatarCheckText.Text = "VTube Studio is still loading. Your OBS/share stays open; the avatar can connect when it is ready.";
+            }
+            return ready;
+        }
+        catch
+        {
+            AvatarSetupPanel.Visibility = Visibility.Visible;
+            AvatarCheckText.Text = "VTube Studio is still loading. Your OBS/share stays open; use Check my avatar later if needed.";
+            return false;
+        }
     }
 
     private async Task SwitchSceneAsync(string scene)
@@ -606,10 +791,13 @@ public partial class MainWindow : Window
         {
             SetBusy(true);
             UpdateUiState();
-            try { await _automation.StopAllStreamsAsync(); } catch { }
-            try { await _obsControl.StopMainStreamAsync(); } catch { }
-            try { await _automation.StopVirtualCameraAsync(); } catch { }
-            try { await _automation.RestoreNormalAudioMonitoringAsync(); } catch { }
+            if (_streamActive)
+            {
+                try { await _automation.StopAllStreamsAsync(); } catch { }
+                try { await _obsControl.StopMainStreamAsync(); } catch { }
+                try { await _automation.StopVirtualCameraAsync(); } catch { }
+                try { await _automation.RestoreNormalAudioMonitoringAsync(); } catch { }
+            }
             ShowProgress("Stopping safely · waiting for OBS to save its state…");
             await _obsProcess.CloseGracefullyAsync(TimeSpan.FromSeconds(20));
         }
@@ -621,6 +809,8 @@ public partial class MainWindow : Window
             _twitchStarted = false;
             _tiktokStarted = false;
             _micMuted = false;
+            _recoveryPending = false;
+            _pendingObsPurpose = PendingObsPurpose.None;
             HideProgress();
             PlatformSetupPanel.Visibility = Visibility.Collapsed;
             FooterStatus.Text = "Stopped cleanly · avatar app left open for next time";
@@ -644,7 +834,7 @@ public partial class MainWindow : Window
                 PlatformSetupPanel.Visibility = Visibility.Collapsed;
                 HideProblem();
                 FooterStatus.Text = "TikTok saved · it will join automatically on your next public start";
-                if (!_streamActive && _obsProcess.IsRunning())
+                if (!_streamActive && !_recoveryPending && _obsProcess.IsRunning())
                 {
                     ShowProgress("Saving TikTok setup and closing OBS safely…");
                     await _obsProcess.CloseGracefullyAsync();
@@ -696,7 +886,7 @@ public partial class MainWindow : Window
             {
                 _obs.Launch(StreamMode.PlainObs, null, _selectedTheme, _selectedAvatar);
                 ShowProgress("Opening the streaming engine…");
-                if (!await _automation.WaitUntilReadyAsync(TimeSpan.FromSeconds(45)))
+                if (!await _automation.WaitUntilReadyAsync(TimeSpan.FromSeconds(75)))
                     throw new InvalidOperationException("The streaming engine did not finish opening in time.");
                 RestorePortableObsWindow();
             }
@@ -722,9 +912,9 @@ public partial class MainWindow : Window
     private async Task CheckAvatarAsync()
     {
         if (_busy || _selectedAvatar != AvatarMode.VTubeStudio) return;
-        if (_streamActive)
+        if (_streamActive || _recoveryPending)
         {
-            ShowProblem("Avatar check is unavailable while live", "Stop the current share/stream before running the avatar test.");
+            ShowProblem("Avatar check is unavailable right now", "Stop the current OBS/share session before running the separate avatar test.");
             return;
         }
 
@@ -737,11 +927,11 @@ public partial class MainWindow : Window
             await _setup.EnsureReadyAsync(progress, needSpout: true);
             _sceneLayout.PrepareBaseScenes(_selectedAvatar);
             ShowProgress("Waiting for VTube Studio to finish opening…");
-            await _vTubeStudio.LaunchAndWaitAsync(TimeSpan.FromSeconds(60));
+            await _vTubeStudio.LaunchAndWaitAsync(TimeSpan.FromSeconds(75));
 
             if (_obsProcess.IsRunning()) await _obsProcess.CloseGracefullyAsync();
             _obs.LaunchAvatarPreview(_selectedTheme);
-            await WaitForStreamingEngineAsync(TimeSpan.FromSeconds(45));
+            await WaitForStreamingEngineAsync(TimeSpan.FromSeconds(60));
             MinimizePortableObsWindow();
 
             if (!await CheckAvatarConnectionAsync(TimeSpan.FromSeconds(40)))
@@ -770,7 +960,7 @@ public partial class MainWindow : Window
 
     private async Task RepairAsync()
     {
-        if (_busy || _streamActive) return;
+        if (_busy || _streamActive || _recoveryPending) return;
         try
         {
             HideProblem();
@@ -826,10 +1016,14 @@ public partial class MainWindow : Window
         throw new InvalidOperationException("The streaming engine is still starting. StreamKit retried automatically but it did not become ready in time.", last);
     }
 
-    private async Task TryEngineStepAsync(Func<Task> action, string friendlyStatus)
+    private async Task<bool> TryEngineStepAsync(Func<Task> action, string friendlyStatus)
     {
-        try { await RunEngineStepWithRetryAsync(action, friendlyStatus, 5); }
-        catch { }
+        try
+        {
+            await RunEngineStepWithRetryAsync(action, friendlyStatus, 5);
+            return true;
+        }
+        catch { return false; }
     }
 
     private static bool LooksLikeStartupDelay(Exception ex)
@@ -837,7 +1031,8 @@ public partial class MainWindow : Window
         var text = (ex.Message + " " + ex.InnerException?.Message).ToLowerInvariant();
         return text.Contains("not ready") || text.Contains("starting") || text.Contains("timeout")
                || text.Contains("timed out") || text.Contains("connection") || text.Contains("websocket")
-               || text.Contains("perform the request") || text.Contains("closed the connection");
+               || text.Contains("perform the request") || text.Contains("closed the connection")
+               || text.Contains("not responding");
     }
 
     private async Task<string?> WaitForVerticalCanvasAsync(TimeSpan timeout)
@@ -911,7 +1106,9 @@ public partial class MainWindow : Window
     {
         SetSegment(DiscordOnlySegment, _selectedMode == StreamMode.DiscordOnly);
         SetSegment(AllPlatformsSegment, _selectedMode == StreamMode.AllPlatforms);
-        MainActionButton.Content = _streamActive ? "Reopen Discord share window" : GetActionLabel();
+        MainActionButton.Content = _recoveryPending
+            ? "Retry StreamKit controls"
+            : _streamActive ? "Reopen Discord share window" : GetActionLabel();
 
         if (_selectedMode == StreamMode.DiscordOnly)
         {
@@ -944,12 +1141,13 @@ public partial class MainWindow : Window
     private void UpdateUiState()
     {
         var sceneReady = _sceneControlsReady || _streamActive;
-        SceneControlsPanel.Visibility = sceneReady ? Visibility.Visible : Visibility.Collapsed;
+        var sessionOpen = _streamActive || _recoveryPending;
+        SceneControlsPanel.Visibility = sceneReady || _recoveryPending ? Visibility.Visible : Visibility.Collapsed;
         StartingSoonButton.IsEnabled = sceneReady && !_busy;
         BrbButton.IsEnabled = sceneReady && !_busy;
         GameCleanButton.IsEnabled = sceneReady && !_busy;
         BpsrButton.IsEnabled = sceneReady && !_busy;
-        StopStreamButton.IsEnabled = sceneReady && !_busy;
+        StopStreamButton.IsEnabled = (sceneReady || _recoveryPending) && !_busy;
         MicMuteButton.IsEnabled = _streamActive && !_busy && _selectedMode == StreamMode.AllPlatforms;
         MicMuteButton.Content = _selectedMode == StreamMode.DiscordOnly
             ? "Discord mic separate"
@@ -957,23 +1155,27 @@ public partial class MainWindow : Window
         MicMuteButton.Visibility = _selectedMode == StreamMode.AllPlatforms ? Visibility.Visible : Visibility.Collapsed;
 
         MainActionButton.IsEnabled = !_busy;
-        DiscordOnlySegment.IsEnabled = !_busy && !_streamActive;
-        AllPlatformsSegment.IsEnabled = !_busy && !_streamActive;
-        AvatarCombo.IsEnabled = !_busy && !_streamActive;
-        ThemeCombo.IsEnabled = !_busy && !_streamActive;
-        GameCombo.IsEnabled = !_busy && !_streamActive;
-        CheckAvatarButton.IsEnabled = !_busy && !_streamActive;
+        DiscordOnlySegment.IsEnabled = !_busy && !sessionOpen;
+        AllPlatformsSegment.IsEnabled = !_busy && !sessionOpen;
+        AvatarCombo.IsEnabled = !_busy && !sessionOpen;
+        ThemeCombo.IsEnabled = !_busy && !sessionOpen;
+        GameCombo.IsEnabled = !_busy && !sessionOpen;
+        CheckAvatarButton.IsEnabled = !_busy && !sessionOpen;
 
         TikTokSetupShortcut.Visibility = _selectedMode == StreamMode.AllPlatforms
                                          && !_lastAitum.TikTokOutputConfigured
                                          && PlatformSetupPanel.Visibility != Visibility.Visible
+                                         && !_recoveryPending
             ? Visibility.Visible
             : Visibility.Collapsed;
-        SceneControlHint.Text = _verticalScenesReady
-            ? "These four scenes stay synchronized across horizontal and TikTok vertical views."
-            : "These four scenes control the active horizontal share/stream view.";
+        SceneControlHint.Text = _recoveryPending
+            ? "OBS is still open. Retry StreamKit controls when it finishes loading; Stop closes it only if you choose to."
+            : _verticalScenesReady
+                ? "These four scenes stay synchronized across horizontal and TikTok vertical views."
+                : "These four scenes control the active horizontal share/stream view.";
 
-        if (!_streamActive) MainActionButton.Content = GetActionLabel();
+        if (_recoveryPending) MainActionButton.Content = "Retry StreamKit controls";
+        else if (!_streamActive) MainActionButton.Content = GetActionLabel();
         Cursor = _busy ? System.Windows.Input.Cursors.Wait : System.Windows.Input.Cursors.Arrow;
         ApplyQuickLaunchLayout();
         RefreshQuickLaunch();
@@ -1010,20 +1212,22 @@ public partial class MainWindow : Window
 
     private void ApplyQuickLaunchLayout()
     {
-        var showQuick = _returningUser && _quickMode && !_streamActive;
-        var showSetup = !_streamActive && (!_returningUser || !_quickMode);
+        var showQuick = _returningUser && _quickMode && !_streamActive && !_recoveryPending;
+        var showSetup = !_streamActive && !_recoveryPending && (!_returningUser || !_quickMode);
         QuickLaunchPanel.Visibility = showQuick ? Visibility.Visible : Visibility.Collapsed;
         SetupSectionLabel.Visibility = showSetup ? Visibility.Visible : Visibility.Collapsed;
         SetupGrid.Visibility = showSetup ? Visibility.Visible : Visibility.Collapsed;
-        QuickLaunchReturnButton.Visibility = _returningUser && !_quickMode && !_streamActive
+        QuickLaunchReturnButton.Visibility = _returningUser && !_quickMode && !_streamActive && !_recoveryPending
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        HeaderSubtitle.Text = showQuick
-            ? "Your saved setup is ready in one click."
-            : _returningUser
-                ? "Adjust anything, then return to Quick Launch when ready."
-                : "Three steps. No streaming software knowledge needed.";
+        HeaderSubtitle.Text = _recoveryPending
+            ? "OBS is open. StreamKit will reconnect to the same session instead of restarting it."
+            : showQuick
+                ? "Your saved setup is ready in one click."
+                : _returningUser
+                    ? "Adjust anything, then return to Quick Launch when ready."
+                    : "Three steps. No streaming software knowledge needed.";
     }
 
     private void RefreshQuickLaunch()
@@ -1032,20 +1236,22 @@ public partial class MainWindow : Window
         var destination = _selectedMode == StreamMode.DiscordOnly
             ? "Discord"
             : _lastAitum.TikTokOutputConfigured ? "Discord + Twitch + TikTok" : "Discord + Twitch";
-        var status = _lastDetection?.GameRunning == true
-            ? "Saved setup is ready."
-            : SelectedGame is null ? "Choose a game in Customize setup." : $"Open {SelectedGame.DisplayName} to start.";
+        var status = _recoveryPending
+            ? "OBS is already open. Retry StreamKit controls."
+            : _lastDetection?.GameRunning == true
+                ? "Saved setup is ready."
+                : SelectedGame is null ? "Choose a game in Customize setup." : $"Open {SelectedGame.DisplayName} to start.";
         QuickLaunchPanel.SetState(
             SelectedGame?.DisplayName ?? "Choose a game",
             status,
             SelectedAvatarChoice?.DisplayName ?? "Full VTuber",
             SelectedThemeChoice?.DisplayName ?? "Sakura",
             destination,
-            GetActionLabel(),
+            _recoveryPending ? "Retry StreamKit controls" : GetActionLabel(),
             _selectedMode == StreamMode.AllPlatforms && !_lastAitum.TikTokOutputConfigured
                 ? "TikTok is optional. Your saved Twitch + Discord setup can start now."
                 : ActionHint.Text,
-            !_busy && !_streamActive);
+            !_busy && !_streamActive && !_recoveryPending);
     }
 
     private StreamTheme LoadSavedTheme()
@@ -1120,6 +1326,11 @@ public partial class MainWindow : Window
             ShowProblem(title, FriendlyError(ex), "Open TikTok setup", () => OpenObsForSetupAsync(needAitum: true));
             return;
         }
+        if (retry is not null && LooksLikeStartupDelay(ex))
+        {
+            ShowProblem(title, FriendlyError(ex), "Retry controls", retry);
+            return;
+        }
         if (text.Contains("game") || text.Contains("running"))
         {
             ShowProblem(title, FriendlyError(ex), "Find games", async () =>
@@ -1148,9 +1359,9 @@ public partial class MainWindow : Window
     {
         var text = (ex.Message + " " + ex.InnerException?.Message).ToLowerInvariant();
         if (text.Contains("avatar") || text.Contains("vtube") || text.Contains("spout"))
-            return "The avatar is not reaching StreamKit yet. Keep VTube Studio open, check Spout2 + transparent capture, then run Check my avatar.";
-        if (text.Contains("not ready") || text.Contains("starting") || text.Contains("websocket") || text.Contains("connection") || text.Contains("timeout"))
-            return "The streaming engine took longer than expected to respond. StreamKit did not open another duplicate copy; retry after it finishes loading.";
+            return "The avatar is not reaching StreamKit yet. Keep VTube Studio open; this no longer needs to stop an otherwise working OBS session.";
+        if (text.Contains("not ready") || text.Contains("starting") || text.Contains("websocket") || text.Contains("connection") || text.Contains("timeout") || text.Contains("not responding"))
+            return "StreamKit controls took longer than expected to connect. If OBS is already open, leave it open and retry the controls; StreamKit will reuse the same process.";
         if (text.Contains("vertical") || text.Contains("tiktok") || text.Contains("aitum"))
             return "The optional TikTok vertical output is not ready. Twitch + Discord remain usable; open TikTok setup when you want to fix it.";
         if (text.Contains("game") || text.Contains("running"))
@@ -1229,7 +1440,7 @@ public partial class MainWindow : Window
 
     private async void DiscordOnlySegment_Click(object sender, RoutedEventArgs e)
     {
-        if (_streamActive || _busy) return;
+        if (_streamActive || _recoveryPending || _busy) return;
         _selectedMode = StreamMode.DiscordOnly;
         SavePreferences();
         ApplyModeSelection();
@@ -1238,7 +1449,7 @@ public partial class MainWindow : Window
 
     private async void AllPlatformsSegment_Click(object sender, RoutedEventArgs e)
     {
-        if (_streamActive || _busy) return;
+        if (_streamActive || _recoveryPending || _busy) return;
         _selectedMode = StreamMode.AllPlatforms;
         SavePreferences();
         _lastAitum = _aitumState.Read();
@@ -1248,7 +1459,7 @@ public partial class MainWindow : Window
 
     private async void AvatarCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loadingAvatar || _streamActive || _busy || SelectedAvatarChoice is not { } choice) return;
+        if (_loadingAvatar || _streamActive || _recoveryPending || _busy || SelectedAvatarChoice is not { } choice) return;
         _selectedAvatar = choice.Mode;
         SavePreferences();
         UpdateAvatarCard();
@@ -1258,7 +1469,7 @@ public partial class MainWindow : Window
 
     private async void ThemeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loadingTheme || _streamActive || _busy || SelectedThemeChoice is not { } choice) return;
+        if (_loadingTheme || _streamActive || _recoveryPending || _busy || SelectedThemeChoice is not { } choice) return;
         _selectedTheme = choice.Theme;
         SavePreferences();
         await RefreshStatusAsync();
@@ -1266,7 +1477,7 @@ public partial class MainWindow : Window
 
     private async void GameCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loadingGames || _streamActive || _busy) return;
+        if (_loadingGames || _streamActive || _recoveryPending || _busy) return;
         UpdateGameCard();
         if (SelectedGame is { } game)
         {
@@ -1278,7 +1489,7 @@ public partial class MainWindow : Window
 
     private async void ScanGames_Click(object sender, RoutedEventArgs e)
     {
-        if (_busy || _streamActive) return;
+        if (_busy || _streamActive || _recoveryPending) return;
         await RefreshGameChoicesAsync(preserveSelection: true);
         await RefreshStatusAsync();
     }
@@ -1286,7 +1497,7 @@ public partial class MainWindow : Window
     private async void Refresh_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
-        if (!_streamActive) await RefreshGameChoicesAsync(preserveSelection: true);
+        if (!_streamActive && !_recoveryPending) await RefreshGameChoicesAsync(preserveSelection: true);
         await RefreshStatusAsync();
     }
 
@@ -1308,12 +1519,14 @@ public partial class MainWindow : Window
 
     private void QuickLaunch_Click(object sender, RoutedEventArgs e)
     {
+        if (_recoveryPending) return;
         _quickMode = true;
         ApplyQuickLaunchLayout();
     }
 
     private void ShowTikTokSetup_Click(object sender, RoutedEventArgs e)
     {
+        if (_recoveryPending) return;
         PlatformSetupPanel.Visibility = Visibility.Visible;
         TikTokSetupShortcut.Visibility = Visibility.Collapsed;
         FooterStatus.Text = "TikTok is optional · open setup only when you have a server + stream key";
