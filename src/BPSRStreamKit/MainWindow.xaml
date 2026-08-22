@@ -97,6 +97,19 @@
                                 <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="Avatar help" Click="AvatarHelp_Click"
                                         VerticalAlignment="Bottom" MinWidth="88"/>
                             </Grid>
+
+                            <Border Height="104" Margin="0,11,0,0" Background="#0B0F16" BorderBrush="#343C4C" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
+                                <Grid>
+                                    <Image x:Name="FramePreviewImage" Stretch="UniformToFill" SnapsToDevicePixels="True"/>
+                                    <Border VerticalAlignment="Bottom" Background="#DB080B11" Padding="10,7">
+                                        <StackPanel MinWidth="0">
+                                            <TextBlock x:Name="FramePreviewName" Text="Sakura" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock x:Name="FrameThemeDetailText" Text="Elegant petals · blush pink + lavender" FontSize="9.5" Foreground="#AEB7C7"
+                                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
                         </StackPanel>
                     </Border>
 
@@ -262,7 +275,7 @@
                 <Grid Margin="4,15,4,0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock x:Name="FooterStatus" Text="Ready when you are" FontSize="10" Foreground="#737C8E" TextTrimming="CharacterEllipsis" Margin="0,0,12,0"/>
-                    <TextBlock x:Name="VersionText" Grid.Column="1" Text="v2.3.0" FontSize="10" Foreground="#737C8E"/>
+                    <TextBlock x:Name="VersionText" Grid.Column="1" Text="v2.4.1" FontSize="10" Foreground="#737C8E"/>
                 </Grid>
             </StackPanel>
         </ScrollViewer>

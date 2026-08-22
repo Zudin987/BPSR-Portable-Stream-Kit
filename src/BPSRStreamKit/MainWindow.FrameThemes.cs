@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using BPSRStreamKit.Services;
 
 namespace BPSRStreamKit;
@@ -64,6 +65,7 @@ public partial class MainWindow
 
         ThemeCombo.SelectionChanged += ExpandedFrameTheme_SelectionChanged;
         SavePreferences();
+        UpdateFramePreview(desired);
         RefreshQuickLaunch();
 
         if (activationError is not null)
@@ -88,11 +90,12 @@ public partial class MainWindow
         try
         {
             SetBusy(true);
-            FooterStatus.Text = $"Preparing frame style · {selected.DisplayName}…";
+            FooterStatus.Text = $"Preparing premium frame · {selected.DisplayName}…";
             FrameThemeService.Activate(selected);
             _activeFrameThemeKey = selected.Key;
             _selectedTheme = selected.LegacyTheme;
             SavePreferences();
+            UpdateFramePreview(selected);
             HideProblem();
             FooterStatus.Text = $"Frame style saved · {selected.DisplayName}";
             RefreshQuickLaunch();
@@ -115,6 +118,7 @@ public partial class MainWindow
                 _loadingTheme = false;
             }
 
+            UpdateFramePreview(previous);
             SavePreferences();
             ShowProblem(
                 "Couldn’t switch frame style",
@@ -125,6 +129,30 @@ public partial class MainWindow
         finally
         {
             SetBusy(false);
+        }
+    }
+
+    private void UpdateFramePreview(FrameThemeDefinition theme)
+    {
+        FramePreviewName.Text = theme.DisplayName;
+        FrameThemeDetailText.Text = theme.Detail;
+        FramePreviewImage.ToolTip = $"{theme.DisplayName} · {theme.Detail}";
+
+        try
+        {
+            var path = FrameThemeService.GetPreviewPath(theme);
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            bitmap.UriSource = new Uri(path, UriKind.Absolute);
+            bitmap.EndInit();
+            bitmap.Freeze();
+            FramePreviewImage.Source = bitmap;
+        }
+        catch
+        {
+            FramePreviewImage.Source = null;
         }
     }
 }

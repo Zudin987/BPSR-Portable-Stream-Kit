@@ -138,10 +138,10 @@ public sealed class ObsService
             avatarDirectory = Path.Combine(themeRoot, "Avatar");
             horizontalFrame = Path.Combine(themeRoot, "Frames", "Discord_1080p.png");
             verticalFrame = Path.Combine(themeRoot, "Frames", "TikTok_1080x1920.png");
-            horizontalStarting = Path.Combine(themeRoot, "Screens", "Starting_1080p.jpg");
-            horizontalBrb = Path.Combine(themeRoot, "Screens", "BRB_1080p.jpg");
-            verticalStarting = Path.Combine(themeRoot, "Screens", "Starting_TikTok_1080x1920.jpg");
-            verticalBrb = Path.Combine(themeRoot, "Screens", "BRB_TikTok_1080x1920.jpg");
+            horizontalStarting = Path.Combine(themeRoot, "Screens", "Starting_1080p.png");
+            horizontalBrb = Path.Combine(themeRoot, "Screens", "BRB_1080p.png");
+            verticalStarting = Path.Combine(themeRoot, "Screens", "Starting_TikTok_1080x1920.png");
+            verticalBrb = Path.Combine(themeRoot, "Screens", "BRB_TikTok_1080x1920.png");
         }
         else
         {

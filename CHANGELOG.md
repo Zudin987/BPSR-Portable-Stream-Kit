@@ -1,5 +1,17 @@
 # StreamKit Changelog
 
+## v2.4.1 — premium frame visual overhaul
+
+- Rebuilt the generated frame renderer around layered glow strokes, inner highlights, angular/rounded corner plates and a bottom signature instead of the older thin-outline look.
+- Gave every frame style a stronger visual identity: Sakura petals, Doctor heartbeat/medical HUD, Neon Tech circuitry, Black Gold luxury geometry, Crimson Demon shards, Ice Crystal facets, Forest Mystic vines/runes, Cyber Orange tactical chevrons and Moonlight Silver celestial motifs.
+- Redesigned Starting Soon / BRB screens with atmospheric gradients, theme glows, a central glass title card, fitted typography and matching emblems.
+- Added an in-app 16:9 frame preview directly below the Frame style selector so a style can be evaluated before OBS starts.
+- Added strict preview text trimming and retained the scrollable minimum-width layout to prevent UI overflow.
+- Versioned generated art into `user-data/frame-themes-v3`, forcing v2.4.0 cached themes to regenerate with the new renderer while preserving the user's selected theme.
+- Updated Chibi Doctor to use the premium generated PNG intermission screens as well as the generated frame.
+- Kept the gameplay center transparent and concentrated ornamentation near the outer edge to avoid covering the game HUD, DPS meter or dungeon-mechanic overlay.
+- Fixed the first CI compile issue in text-shadow rendering by using WPF text geometry instead of unsupported `FormattedText` property access.
+
 ## v2.4.0 — frame styles and scene cleanup
 
 - Expanded **Frame style** from 2 to 9 choices: Sakura, Chibi Doctor, Neon Tech, Black Gold, Crimson Demon, Ice Crystal, Forest Mystic, Cyber Orange and Moonlight Silver.
