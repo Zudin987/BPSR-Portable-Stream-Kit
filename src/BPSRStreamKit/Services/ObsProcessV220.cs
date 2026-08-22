@@ -8,7 +8,15 @@ public sealed class ObsProcessV220
 {
     private const uint WmClose = 0x0010;
 
-    public bool IsRunning() => GetPortableObsProcesses().Count > 0;
+    public bool IsRunning()
+    {
+        var processes = GetPortableObsProcesses();
+        try { return processes.Count > 0; }
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
+        }
+    }
 
     public async Task<bool> CloseGracefullyAsync(TimeSpan? timeout = null)
     {
@@ -56,7 +64,7 @@ public sealed class ObsProcessV220
                 await Task.Delay(500);
             }
 
-            // Only force-close after giving OBS and its plugins plenty of time to save state.
+            // Force close is only a last resort after OBS/plugins had time to save state.
             foreach (var process in processes)
             {
                 try
