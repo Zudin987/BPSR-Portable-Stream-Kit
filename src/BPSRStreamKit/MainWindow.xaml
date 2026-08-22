@@ -151,7 +151,7 @@
                         <Border Grid.Column="2" Background="#10131D" BorderBrush="#343A52" BorderThickness="1" CornerRadius="14" Padding="16">
                             <StackPanel VerticalAlignment="Center">
                                 <Button Style="{StaticResource SecondaryButton}" Content="Open VTube Studio" Click="OpenVTubeStudio_Click" ToolTip="Open the avatar app through Steam."/>
-                                <Button x:Name="CheckAvatarButton" Style="{StaticResource PrimaryButton}" Content="Check my avatar" Height="52" Margin="0,10,0,0" Click="CheckAvatar_Click"/>
+                                <Button x:Name="CheckAvatarButton" Style="{StaticResource PrimaryButton}" Content="Check my avatar" Height="52" Margin="0,10,0,0" Click="CheckAvatarV204_Click"/>
                                 <TextBlock x:Name="AvatarCheckText" Text="StreamKit will test the avatar automatically." FontSize="10" Foreground="{StaticResource MutedBrush}" Margin="2,9,2,0" TextWrapping="Wrap" TextAlignment="Center"/>
                             </StackPanel>
                         </Border>
