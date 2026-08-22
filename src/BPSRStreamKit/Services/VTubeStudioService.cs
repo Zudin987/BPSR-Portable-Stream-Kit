@@ -17,26 +17,11 @@ public sealed class VTubeStudioService
     private static readonly object LaunchSync = new();
     private static DateTime _lastLaunchRequestUtc = DateTime.MinValue;
 
-    public bool IsRunning()
-    {
-        try
-        {
-            foreach (var process in Process.GetProcesses())
-            {
-                using (process)
-                {
-                    if (LooksLikeVTubeStudio(process)) return true;
-                }
-            }
-        }
-        catch { }
-        return false;
-    }
+    public bool IsRunning() => IsAnyVTubeProcessRunning();
 
     public void Launch()
     {
-        if (TryGetCaptureTarget() is not null) return;
-        if (IsRunning()) return;
+        if (TryGetCaptureTarget() is not null || IsAnyVTubeProcessRunning()) return;
         RequestSteamLaunchIfAllowed(TimeSpan.FromSeconds(15));
     }
 
@@ -48,21 +33,18 @@ public sealed class VTubeStudioService
             var existing = TryGetCaptureTarget();
             if (existing is not null) return existing;
 
-            var total = timeout ?? TimeSpan.FromSeconds(60);
-            var until = DateTime.UtcNow + total;
+            var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(60));
             var recoveryAttemptUtc = DateTime.UtcNow + TimeSpan.FromSeconds(25);
             var recoveryUsed = false;
 
-            if (!IsRunning()) RequestSteamLaunchIfAllowed(TimeSpan.FromSeconds(15));
+            if (!IsAnyVTubeProcessRunning()) RequestSteamLaunchIfAllowed(TimeSpan.FromSeconds(15));
 
             while (DateTime.UtcNow < until)
             {
                 var target = TryGetCaptureTarget();
                 if (target is not null) return target;
 
-                // If the process is already starting, wait for it instead of repeatedly asking Steam
-                // to launch the same app. One late recovery request is allowed for a stuck background process.
-                if (!IsRunning())
+                if (!IsAnyVTubeProcessRunning())
                 {
                     RequestSteamLaunchIfAllowed(TimeSpan.FromSeconds(15));
                 }
@@ -86,9 +68,10 @@ public sealed class VTubeStudioService
 
     private static void RequestSteamLaunchIfAllowed(TimeSpan minimumGap, bool allowWhenRunning = false)
     {
+        if (!allowWhenRunning && IsAnyVTubeProcessRunning()) return;
+
         lock (LaunchSync)
         {
-            if (!allowWhenRunning && IsAnyVTubeProcessRunning()) return;
             if (DateTime.UtcNow - _lastLaunchRequestUtc < minimumGap) return;
             _lastLaunchRequestUtc = DateTime.UtcNow;
         }
@@ -97,18 +80,23 @@ public sealed class VTubeStudioService
 
     private static bool IsAnyVTubeProcessRunning()
     {
+        Process[] processes;
+        try { processes = Process.GetProcesses(); }
+        catch { return false; }
+
         try
         {
-            foreach (var process in Process.GetProcesses())
+            foreach (var process in processes)
             {
-                using (process)
-                {
-                    if (LooksLikeVTubeStudio(process)) return true;
-                }
+                try { if (LooksLikeVTubeStudio(process)) return true; }
+                catch { }
             }
+            return false;
         }
-        catch { }
-        return false;
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
+        }
     }
 
     private static void LaunchThroughSteam()
@@ -116,7 +104,7 @@ public sealed class VTubeStudioService
         var uri = $"steam://rungameid/{SteamAppId}";
         try
         {
-            Process.Start(new ProcessStartInfo
+            using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = "explorer.exe",
                 Arguments = uri,
@@ -125,7 +113,7 @@ public sealed class VTubeStudioService
         }
         catch
         {
-            try { Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true }); }
+            try { using var process = Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true }); }
             catch { }
         }
     }
