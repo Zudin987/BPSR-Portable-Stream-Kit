@@ -65,8 +65,6 @@ public sealed class GameCatalogService
 
     public void Save(GameTarget target)
     {
-        // Remembering a game is convenience only. A read-only/locked portable folder must never
-        // prevent an otherwise valid stream from starting.
         try
         {
             var saved = LoadSaved()
@@ -99,8 +97,9 @@ public sealed class GameCatalogService
     {
         var results = new List<GameTarget>();
 
-        EnumWindows((hwnd, _) =>
+        EnumWindows((hwnd, unused) =>
         {
+            _ = unused;
             try
             {
                 if (!IsWindowVisible(hwnd)) return true;
@@ -135,10 +134,7 @@ public sealed class GameCatalogService
                     processName.Equals("StarSEA", StringComparison.OrdinalIgnoreCase),
                     true));
             }
-            catch
-            {
-                // Protected, elevated or closing windows are simply not game candidates.
-            }
+            catch { }
             return true;
         }, IntPtr.Zero);
 
@@ -174,7 +170,7 @@ public sealed class GameCatalogService
     [DllImport("user32.dll")]
     private static extern int GetWindowTextLength(IntPtr hWnd);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 }
