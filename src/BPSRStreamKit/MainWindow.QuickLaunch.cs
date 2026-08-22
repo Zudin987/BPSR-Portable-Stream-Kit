@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using BPSRStreamKit.Infrastructure;
+using BPSRStreamKit.Models;
 
 namespace BPSRStreamKit;
 
@@ -60,7 +61,7 @@ public partial class MainWindow
         };
         root.Children.Insert(setupIndex, _quickLaunchCard);
 
-        if (root.Children.FirstOrDefault() is Grid header)
+        if (root.Children.Count > 0 && root.Children[0] is Grid header)
         {
             var headerButtons = header.Children
                 .OfType<StackPanel>()
@@ -152,7 +153,7 @@ public partial class MainWindow
         var status = string.IsNullOrWhiteSpace(HeroTitle.Text) ? "Your saved setup is ready." : HeroTitle.Text;
         var avatar = SelectedAvatarChoice?.DisplayName ?? "Full VTuber";
         var theme = SelectedThemeChoice?.DisplayName ?? "Sakura";
-        var destination = _selectedMode == Models.StreamMode.DiscordOnly ? "Discord" : "Discord + Twitch + TikTok";
+        var destination = _selectedMode == StreamMode.DiscordOnly ? "Discord" : "Discord + Twitch + TikTok";
         var actionLabel = MainActionButton.Content?.ToString() ?? GetActionLabel();
         var actionHint = string.IsNullOrWhiteSpace(ActionHint.Text)
             ? "StreamKit will reuse your saved setup."
