@@ -121,27 +121,33 @@ A separately installed OBS instance is not targeted by StreamKit's portable-proc
 
 The main window is designed around a minimum size of 1040×760 and uses wrapping/trimming instead of allowing dynamic text to overlap adjacent controls. Long game/theme/avatar labels are trimmed with tooltips, descriptive copy wraps, the four scene buttons stay in one equal-width row, and Mic/Stop controls use a separate lower row.
 
+v2.4.1 adds a fixed-height **frame preview card** directly below the Frame style selector. It shows the selected theme before OBS starts; the theme name/detail are trimmed rather than allowed to overflow. The setup remains scrollable at the minimum window size.
+
 Waiting operations such as OBS/VTube startup use an indeterminate progress bar instead of incorrectly showing `100%` while work is still happening.
 
 Errors are surfaced in the app with context-specific recovery actions such as **Find games**, **Avatar help**, **Open TikTok setup**, **Retry controls** or **Fix setup** instead of routing every failure to the same generic repair button.
 
 ## Frame themes
 
-v2.4 includes **nine selectable frame styles**:
+v2.4.1 includes **nine premium selectable frame styles**:
 
-- **Sakura** — soft pink / purple minimal frame.
-- **Chibi Doctor** — cyan / white medical frame.
-- **Neon Tech** — cyan + violet futuristic glow.
-- **Black Gold** — restrained black / gold premium styling.
-- **Crimson Demon** — angular red / black infernal styling.
-- **Ice Crystal** — bright frozen-blue crystal styling.
-- **Forest Mystic** — emerald fantasy / nature styling.
-- **Cyber Orange** — orange / charcoal esports-tech styling.
-- **Moonlight Silver** — silver / navy night styling.
+- **Sakura** — elegant petals with blush pink + lavender glow.
+- **Chibi Doctor** — clean glass HUD with cyan + mint heartbeat details.
+- **Neon Tech** — layered cyber HUD with cyan + violet circuitry.
+- **Black Gold** — restrained luxury geometry with matte black + warm gold.
+- **Crimson Demon** — sharp infernal shards with crimson + ember accents.
+- **Ice Crystal** — frosted facets with ice-blue + silver highlights.
+- **Forest Mystic** — enchanted vines/runes with emerald + teal accents.
+- **Cyber Orange** — tactical esports HUD with orange + charcoal chevrons.
+- **Moonlight Silver** — celestial silver/navy frame with crescent + star details.
 
-Each style includes a horizontal frame, TikTok vertical frame, Starting Soon screen and BRB screen. The seven additional styles are generated locally the first time you select them and then cached under `user-data/frame-themes`, keeping the downloadable ZIP much smaller. First-time generation may take a brief moment; StreamKit shows its normal busy state while it prepares the files.
+The v2.4.1 renderer uses layered glow strokes, inner highlights, corner plates, bottom signatures and theme-specific ornaments while keeping the gameplay center transparent. Decoration is concentrated near the outer edge so game UI, DPS meter and dungeon-mechanic overlays remain readable.
 
-Frame style is independent from avatar mode: choosing a new frame never replaces your VTuber model or PNG avatar. Existing Sakura and Chibi Doctor installations remain compatible.
+Each style includes a horizontal frame, TikTok vertical frame, Starting Soon screen and BRB screen. Intermission screens use atmospheric gradients, theme glows, a central glass title card, fitted typography and a theme emblem instead of the older plain generated panel.
+
+Themes are generated locally and cached under `user-data/frame-themes-v3`. This new cache generation intentionally replaces the v2.4.0 generated art, so existing users receive the premium visuals after updating instead of continuing to use stale cached frames. First generation may take a brief moment; StreamKit shows its normal busy state while it prepares the files.
+
+Frame style is independent from avatar mode: choosing a new frame never replaces your VTuber model or PNG avatar.
 
 ## What StreamKit automates
 
