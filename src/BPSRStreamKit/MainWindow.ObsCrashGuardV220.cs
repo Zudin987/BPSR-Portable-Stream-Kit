@@ -41,7 +41,7 @@ public partial class MainWindow
             if (string.IsNullOrWhiteSpace(expectedExe)) return;
             var expectedPath = Path.GetFullPath(expectedExe);
 
-            EnumWindowsCrashV220((hwnd, _) =>
+            EnumWindowsCrashV220((hwnd, unused) =>
             {
                 try
                 {
