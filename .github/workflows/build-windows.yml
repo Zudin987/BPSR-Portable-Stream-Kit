@@ -283,40 +283,50 @@ jobs:
             'publish/templates/basic/scenes/BPSR_TikTok_Vertical.json'
           )
           foreach($f in $required){if(-not(Test-Path $f)){throw "Missing release file: $f"}}
+          [xml]$project = Get-Content 'src/BPSRStreamKit/BPSRStreamKit.csproj'
+          $version = [string]($project.Project.PropertyGroup.Version | Select-Object -First 1)
+          if ([string]::IsNullOrWhiteSpace($version)) { throw 'Project version is missing from BPSRStreamKit.csproj' }
           @"
-          StreamKit v2.1.0
+          StreamKit v$version
 
-          1. Extract the whole ZIP and run BPSRStreamKit.exe. Windows will ask for administrator permission; allow it so StreamKit can reliably inspect/capture elevated games and control its portable OBS process.
+          1. Extract the whole ZIP and run BPSRStreamKit.exe. Allow the Windows administrator prompt so StreamKit can reliably inspect/capture elevated games and control its portable OBS process.
           2. Open the game you want to stream and press Find games if needed.
-          3. Choose an Avatar, Frame Style and Stream Mode.
+          3. Choose your Avatar, Frame Style and sharing destination, then press the main button.
 
           Returning users / Quick Launch:
-          - After one successful share/stream, StreamKit opens a compact Quick Launch card on future starts and reuses your remembered game, avatar, frame and destination.
-          - Existing v2.0.4 users with a remembered game and the portable OBS setup are recognized automatically.
-          - Use Customize setup to return to the full 3-step screen. A Quick Launch button appears in the header so you can switch back immediately.
+          - StreamKit remembers your last game, avatar, frame and destination after a successful start.
+          - Quick Launch reuses those choices in one click.
+          - Use Customize setup whenever you want to change them.
 
           Full VTuber first use:
           - StreamKit installs Spout2 into its portable OBS automatically.
           - In VTube Studio choose your model/webcam, enable Spout2 output, use Color Picker Background, enable Transparent in capture, and leave the sender as VTubeStudioSpout.
-          - For face movement, enable camera tracking and calibrate in VTube Studio. Camera tracking already drives mouth movement; Advanced Lipsync + microphone is optional.
-          - Check my avatar no longer needs a game running. StreamKit verifies the transparent avatar frame and auto-fits it for horizontal and TikTok vertical Live layouts.
+          - Check my avatar does not require a game. StreamKit verifies the transparent avatar frame before marking setup complete.
 
           Discord Share:
           - Click Start Discord Share. StreamKit opens Windowed Projector (Program) automatically.
           - In Discord -> Share Your Screen -> choose the OBS Windowed Projector with sound.
-          - Keep your normal Discord microphone selected. StreamKit excludes the OBS mic from Discord share audio to avoid double voice.
+          - Keep your normal Discord microphone selected. StreamKit keeps the OBS mic out of Discord-only share audio to avoid double voice.
 
-          Discord + Twitch + TikTok:
-          - One-time: connect Twitch in portable OBS and configure a TikTok Vertical output in Aitum Stream Suite.
-          - Twitch/TikTok receive selected-game audio + your RNNoise mic. Desktop/system audio is disabled so Discord friends are excluded.
-          - StreamKit opens the Discord projector too; its audio path contains game audio, not the OBS mic.
+          Discord + Twitch (+ TikTok):
+          - Twitch works without TikTok. Connect Twitch once in portable OBS Settings -> Stream.
+          - TikTok is optional. Only when you want it, use Add / set up TikTok and configure the Vertical output with your server/key in Aitum Stream Suite.
+          - If TikTok is not configured, StreamKit skips Aitum and starts Discord + Twitch without blocking you.
+          - Public streams receive selected-game audio + your RNNoise microphone while desktop/system audio remains excluded.
+
+          Scene controls:
+          - Starting Soon: waiting screen.
+          - BRB: be-right-back screen.
+          - Game Clean: game + frame + avatar without BPSR HUD panels.
+          - BPSR: game + avatar + DPS/mechanic HUD.
+          - Mute / Unmute Mic controls the OBS microphone used for public streaming.
+          - Stop closes StreamKit's portable OBS gracefully and leaves VTube Studio open.
 
           Repair:
-          - Fix setup clean-reinstalls the selected runtime plugins and rebuilds StreamKit scenes while preserving account/output configuration.
-          - StreamKit verifies OBS and Spout with pinned SHA-256 values and FloodTuber/Aitum with official GitHub release-asset SHA-256 digests.
+          - Fix setup restores missing runtime/plugin/layout files and reapplies private audio hardening while preserving local account/output settings where possible.
+          - StreamKit verifies pinned/official release downloads before installation.
 
-          While active use StreamKit's Starting Soon / Live / BRB / Mic controls instead of touching OBS.
-          StreamKit intentionally disables update prompts in its portable OBS copy because OBS 32.2.1 and its plugins are pinned as a tested bundle.
+          StreamKit intentionally disables update prompts in its portable OBS copy because OBS 32.2.1 and its plugins are a tested pinned bundle.
           Stream keys/login data stay in your local portable OBS/Aitum configuration.
           VTube Studio is external and is not bundled with StreamKit.
           "@ | Set-Content publish/START_HERE.txt -Encoding UTF8
