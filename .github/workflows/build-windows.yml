@@ -284,16 +284,17 @@ jobs:
           )
           foreach($f in $required){if(-not(Test-Path $f)){throw "Missing release file: $f"}}
           @"
-          StreamKit v2.0.3
+          StreamKit v2.0.4
 
-          1. Extract the whole ZIP and run BPSRStreamKit.exe.
+          1. Extract the whole ZIP and run BPSRStreamKit.exe. Windows will ask for administrator permission; allow it so StreamKit can reliably inspect/capture elevated games and control its portable OBS process.
           2. Open the game you want to stream and press Find games if needed.
           3. Choose an Avatar, Frame Style and Stream Mode.
 
           Full VTuber first use:
           - StreamKit installs Spout2 into its portable OBS automatically.
           - In VTube Studio choose your model/webcam, enable Spout2 output, use Color Picker Background, enable Transparent in capture, and leave the sender as VTubeStudioSpout.
-          - StreamKit verifies the actual transparent avatar frame and auto-fits it for horizontal and TikTok vertical Live layouts.
+          - For face movement, enable camera tracking and calibrate in VTube Studio. Camera tracking already drives mouth movement; Advanced Lipsync + microphone is optional.
+          - Check my avatar no longer needs a game running. StreamKit verifies the transparent avatar frame and auto-fits it for horizontal and TikTok vertical Live layouts.
 
           Discord Share:
           - Click Start Discord Share. StreamKit opens Windowed Projector (Program) automatically.

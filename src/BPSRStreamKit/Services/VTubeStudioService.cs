@@ -64,7 +64,23 @@ public sealed class VTubeStudioService
 
     private static void LaunchThroughSteam()
     {
-        Process.Start(new ProcessStartInfo($"steam://rungameid/{SteamAppId}") { UseShellExecute = true });
+        var uri = $"steam://rungameid/{SteamAppId}";
+        try
+        {
+            // StreamKit intentionally runs elevated. Route the Steam URI through Explorer so an
+            // already-running normal-user Steam/VTube Studio session is reused instead of trying
+            // to create an unnecessarily elevated VTube Studio process.
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = uri,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+        }
     }
 
     public VTubeCaptureTarget? TryGetCaptureTarget()
