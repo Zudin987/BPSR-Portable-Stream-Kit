@@ -38,6 +38,15 @@
             <GradientStop Color="#33251D30" Offset="1"/>
         </LinearGradientBrush>
 
+        <DataTemplate x:Key="ButtonTextTemplate">
+            <TextBlock Text="{Binding}" TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                       TextWrapping="NoWrap" VerticalAlignment="Center"/>
+        </DataTemplate>
+        <DataTemplate x:Key="ChoiceButtonTextTemplate">
+            <TextBlock Text="{Binding}" TextAlignment="Center" TextWrapping="Wrap"
+                       LineHeight="15" VerticalAlignment="Center"/>
+        </DataTemplate>
+
         <Style x:Key="GlassCard" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource PanelBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource StrokeBrush}"/>
@@ -50,6 +59,7 @@
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
 
         <Style TargetType="ToolTip">
@@ -67,9 +77,10 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Height" Value="62"/>
             <Setter Property="MinWidth" Value="180"/>
-            <Setter Property="Padding" Value="28,0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="24,0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="ContentTemplate" Value="{StaticResource ButtonTextTemplate}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Background" Value="{StaticResource AccentGradient}"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -77,7 +88,9 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="16" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.93"/></Trigger>
@@ -95,9 +108,10 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Height" Value="48"/>
             <Setter Property="MinWidth" Value="108"/>
-            <Setter Property="Padding" Value="18,0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="ContentTemplate" Value="{StaticResource ButtonTextTemplate}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Background" Value="#171C26"/>
             <Setter Property="BorderBrush" Value="{StaticResource StrokeBrush}"/>
@@ -107,7 +121,9 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="13" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -124,8 +140,8 @@
 
         <Style x:Key="GhostButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
             <Setter Property="Height" Value="40"/>
-            <Setter Property="MinWidth" Value="92"/>
-            <Setter Property="Padding" Value="15,0"/>
+            <Setter Property="MinWidth" Value="88"/>
+            <Setter Property="Padding" Value="12,0"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -133,14 +149,13 @@
         </Style>
 
         <Style x:Key="ChoiceButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
-            <Setter Property="Height" Value="50"/>
+            <Setter Property="Height" Value="52"/>
             <Setter Property="MinWidth" Value="0"/>
-            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Padding" Value="10,4"/>
             <Setter Property="FontSize" Value="12"/>
+            <Setter Property="ContentTemplate" Value="{StaticResource ChoiceButtonTextTemplate}"/>
         </Style>
 
-        <!-- Keep the native WPF ComboBox template so DisplayMemberPath works reliably.
-             The previous custom template exposed record/debug text to beginners. -->
         <Style TargetType="{x:Type ComboBox}">
             <Setter Property="Foreground" Value="#10131A"/>
             <Setter Property="Background" Value="#F2F3F7"/>
@@ -149,7 +164,7 @@
             <Setter Property="Height" Value="48"/>
             <Setter Property="Padding" Value="12,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="FontSize" Value="13"/>
         </Style>
 
