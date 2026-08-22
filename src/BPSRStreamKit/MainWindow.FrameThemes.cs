@@ -87,6 +87,8 @@ public partial class MainWindow
         var previous = FrameThemeService.Find(_activeFrameThemeKey) ?? FrameThemeService.Default;
         try
         {
+            SetBusy(true);
+            FooterStatus.Text = $"Preparing frame style · {selected.DisplayName}…";
             FrameThemeService.Activate(selected);
             _activeFrameThemeKey = selected.Key;
             _selectedTheme = selected.LegacyTheme;
@@ -119,6 +121,10 @@ public partial class MainWindow
                 $"{selected.DisplayName} could not be generated or saved. StreamKit kept {previous.DisplayName} active. {ex.Message}",
                 "Fix setup",
                 RepairAsync);
+        }
+        finally
+        {
+            SetBusy(false);
         }
     }
 }
