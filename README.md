@@ -20,7 +20,7 @@ StreamKit sends the selected game audio to the projector while keeping the OBS m
 
 ### Discord + Twitch (+ TikTok)
 
-TikTok is **optional** in v2.3.0.
+TikTok is **optional**.
 
 - **Discord:** clean Program Projector window.
 - **Twitch:** normal 1920×1080 horizontal output.
@@ -43,7 +43,7 @@ If the TikTok check fails, Twitch and Discord remain usable. StreamKit cannot gr
 
 ## Quick Launch
 
-After a successful start, StreamKit remembers the selected game, avatar, frame theme and destination.
+After a successful start, StreamKit remembers the selected game, avatar, frame style and destination.
 
 Returning users see one compact card with the remembered setup and one primary start button. **Customize setup** returns to the full 3-step screen, and **Quick Launch** in the header switches back without restarting the app.
 
@@ -57,6 +57,8 @@ When OBS is prepared, StreamKit exposes four direct scene buttons:
 - **BRB** — away screen.
 - **Game Clean** — game + selected frame + avatar, without the BPSR utility HUD.
 - **BPSR** — game + frame + avatar + DPS meter + dungeon-mechanic HUD.
+
+Older StreamKit scene collections may still contain **Discord Share** and **Twitch Live**. These were legacy cloning/template scenes rather than useful user controls. v2.4 automatically migrates their layout into **Game Clean / BPSR** and removes the redundant scenes from existing OBS collections.
 
 When a TikTok Vertical output is active, StreamKit switches the horizontal and vertical versions together. Without TikTok, the same four buttons control only the active horizontal share/stream and do not attempt an Aitum command.
 
@@ -100,7 +102,7 @@ StreamKit intentionally avoids global desktop capture.
 
 ## Reliability and safety behavior
 
-v2.3.0 consolidates the launcher around one controller instead of the older version-specific compatibility layers.
+StreamKit uses one canonical controller instead of the older version-specific compatibility layers.
 
 - One canonical start/stop/scene workflow.
 - One OBS WebSocket protocol implementation with a local authenticated connection.
@@ -109,6 +111,7 @@ v2.3.0 consolidates the launcher around one controller instead of the older vers
 - Periodic game/setup status scans are gated so refreshes do not overlap each other.
 - Process handles used for detection are disposed after each scan.
 - Normal OBS launches no longer secretly kill a previous portable OBS process.
+- If StreamKit controls are slow after OBS has already opened, the working OBS session stays open and **Retry StreamKit controls** reconnects to the same process.
 - Shutdown requests a graceful OBS close first and only force-terminates after a long timeout as a last resort.
 - If OBS 32 shows its **Crash Detected** dialog for StreamKit's own portable OBS, StreamKit continues in **Normal Mode**, because Safe Mode disables the plugins/WebSockets StreamKit requires.
 
@@ -120,14 +123,25 @@ The main window is designed around a minimum size of 1040×760 and uses wrapping
 
 Waiting operations such as OBS/VTube startup use an indeterminate progress bar instead of incorrectly showing `100%` while work is still happening.
 
-Errors are surfaced in the app with context-specific recovery actions such as **Find games**, **Avatar help**, **Open TikTok setup**, **Retry** or **Fix setup** instead of routing every failure to the same generic repair button.
+Errors are surfaced in the app with context-specific recovery actions such as **Find games**, **Avatar help**, **Open TikTok setup**, **Retry controls** or **Fix setup** instead of routing every failure to the same generic repair button.
 
 ## Frame themes
 
-- **Sakura** — pink/purple minimal frame with matching Starting Soon / BRB screens.
-- **Chibi Doctor** — cyan/white medical frame with matching Starting Soon / BRB screens.
+v2.4 includes **nine selectable frame styles**:
 
-The frame theme is independent from the avatar mode.
+- **Sakura** — soft pink / purple minimal frame.
+- **Chibi Doctor** — cyan / white medical frame.
+- **Neon Tech** — cyan + violet futuristic glow.
+- **Black Gold** — restrained black / gold premium styling.
+- **Crimson Demon** — angular red / black infernal styling.
+- **Ice Crystal** — bright frozen-blue crystal styling.
+- **Forest Mystic** — emerald fantasy / nature styling.
+- **Cyber Orange** — orange / charcoal esports-tech styling.
+- **Moonlight Silver** — silver / navy night styling.
+
+Each style includes a horizontal frame, TikTok vertical frame, Starting Soon screen and BRB screen. The seven additional styles are generated locally the first time you select them and then cached under `user-data/frame-themes`, keeping the downloadable ZIP much smaller. First-time generation may take a brief moment; StreamKit shows its normal busy state while it prepares the files.
+
+Frame style is independent from avatar mode: choosing a new frame never replaces your VTuber model or PNG avatar. Existing Sakura and Chibi Doctor installations remain compatible.
 
 ## What StreamKit automates
 
@@ -146,7 +160,7 @@ StreamKit currently handles:
 - optional Virtual Camera in public mode,
 - Starting Soon / BRB / Game Clean / BPSR scene control,
 - graceful public-output/OBS shutdown,
-- saved game/avatar/theme/destination preferences,
+- saved game/avatar/frame/destination preferences,
 - returning-user Quick Launch.
 
 ## First-run downloads
