@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using BPSRStreamKit.Infrastructure;
@@ -23,14 +22,14 @@ public sealed class ObsService
 
         if (mode != StreamMode.PlainObs)
         {
-            EnsureCleanRestart();
             var selected = game ?? throw new InvalidOperationException("Choose a running game first.");
             if (!selected.IsRunning)
                 throw new InvalidOperationException($"{selected.DisplayName} is not running. Open the game and refresh the game list first.");
 
             ApplyTheme(theme, avatarMode, vTubeTarget);
             PrepareGenericCapture(selected, vertical: false);
-            if (mode == StreamMode.AllPlatforms) PrepareGenericCapture(selected, vertical: true);
+            // Vertical capture is prepared only by PrepareAllPlatforms when TikTok is actually configured.
+            // Twitch + Discord therefore do not pay the Aitum/vertical setup cost.
         }
 
         var startInfo = new ProcessStartInfo
@@ -47,25 +46,20 @@ public sealed class ObsService
         switch (mode)
         {
             case StreamMode.DiscordOnly:
-                // Discord screen-share mode uses a clean Program projector instead of Virtual Camera.
-                // The launcher opens that projector after OBS WebSocket is ready.
                 AddSelection(startInfo, "Discord Share", "BPSR Horizontal", "Game Clean");
                 break;
             case StreamMode.AllPlatforms:
                 AddSelection(startInfo, "Twitch 1080p", "BPSR Horizontal", "Game Clean");
-                // Keep Virtual Camera available as an optional Discord fallback while the default
-                // Discord workflow is the projector opened by StreamKit.
                 startInfo.ArgumentList.Add("--startvirtualcam");
                 break;
         }
 
-        Process.Start(startInfo);
+        using var process = Process.Start(startInfo);
     }
 
     public void LaunchAvatarPreview(StreamTheme theme)
     {
         var obsExe = AppPaths.FindObsExe() ?? throw new FileNotFoundException("Portable OBS is not ready yet.");
-        EnsureCleanRestart();
         ApplyTheme(theme, AvatarMode.VTubeStudio, null);
         AudioPrivacyService.HardenPortableObsConfig();
 
@@ -80,13 +74,12 @@ public sealed class ObsService
         startInfo.ArgumentList.Add("--disable-updater");
         AddWebSocketArguments(startInfo);
         AddSelection(startInfo, "Discord Share", "BPSR Horizontal", "Game Clean");
-        Process.Start(startInfo);
+        using var process = Process.Start(startInfo);
     }
 
     public void LaunchAitumBootstrap(GameTarget game, StreamTheme theme, AvatarMode avatarMode, VTubeCaptureTarget? vTubeTarget)
     {
         var obsExe = AppPaths.FindObsExe() ?? throw new FileNotFoundException("Portable OBS is not ready yet.");
-        EnsureCleanRestart();
         ApplyTheme(theme, avatarMode, vTubeTarget);
         PrepareGenericCapture(game, vertical: false);
 
@@ -101,7 +94,7 @@ public sealed class ObsService
         info.ArgumentList.Add("--disable-updater");
         AddWebSocketArguments(info);
         AddSelection(info, "Twitch 1080p", "BPSR Horizontal", "Game Clean");
-        Process.Start(info);
+        using var process = Process.Start(info);
     }
 
     public void PrepareAllPlatforms(string verticalCanvasUuid, GameTarget game, StreamTheme theme,
@@ -110,44 +103,10 @@ public sealed class ObsService
         if (string.IsNullOrWhiteSpace(verticalCanvasUuid))
             throw new ArgumentException("Vertical canvas UUID is required.", nameof(verticalCanvasUuid));
 
-        EnsureCleanRestart();
         ApplyTheme(theme, avatarMode, vTubeTarget);
         PrepareGenericCapture(game, vertical: false);
         PrepareGenericCapture(game, vertical: true);
         ImportVerticalCanvasScene(verticalCanvasUuid, avatarMode);
-    }
-
-    public bool Stop()
-    {
-        var obsExe = AppPaths.FindObsExe();
-        if (string.IsNullOrWhiteSpace(obsExe)) return false;
-        var expectedPath = Path.GetFullPath(obsExe);
-        var processName = Path.GetFileNameWithoutExtension(obsExe);
-        var stoppedAny = false;
-
-        foreach (var process in Process.GetProcessesByName(processName))
-        {
-            try
-            {
-                var actualPath = process.MainModule?.FileName;
-                if (string.IsNullOrWhiteSpace(actualPath) ||
-                    !Path.GetFullPath(actualPath).Equals(expectedPath, StringComparison.OrdinalIgnoreCase)) continue;
-                stoppedAny = true;
-                if (!process.CloseMainWindow() || !process.WaitForExit(4000))
-                {
-                    process.Kill(entireProcessTree: true);
-                    process.WaitForExit(3000);
-                }
-            }
-            catch { }
-            finally { process.Dispose(); }
-        }
-        return stoppedAny;
-    }
-
-    private void EnsureCleanRestart()
-    {
-        if (Stop()) Thread.Sleep(1100);
     }
 
     private static void AddWebSocketArguments(ProcessStartInfo info)
@@ -224,12 +183,14 @@ public sealed class ObsService
         var avatar = FindSource(sources, "FloodTuber Avatar") ?? throw new InvalidOperationException("The PNG avatar source is missing. Use Advanced → Repair once.");
         var avatarSettings = avatar["settings"]?.AsObject() ?? new JsonObject();
         avatar["settings"] = avatarSettings;
+        var talkA = Path.Combine(avatarDirectory, "talk_a.png");
+        var talkB = Path.Combine(avatarDirectory, "talk_b.png");
         avatarSettings["path_idle"] = ObsPath(Path.Combine(avatarDirectory, "idle.png"));
         avatarSettings["path_blink"] = ObsPath(Path.Combine(avatarDirectory, "blink.png"));
         avatarSettings["path_action"] = ObsPath(Path.Combine(avatarDirectory, "action.png"));
-        avatarSettings["path_talk_1"] = ObsPath(Path.Combine(avatarDirectory, "talk_a.png"));
-        avatarSettings["path_talk_2"] = ObsPath(Path.Combine(avatarDirectory, "talk_a.png"));
-        avatarSettings["path_talk_3"] = ObsPath(Path.Combine(avatarDirectory, "talk_a.png"));
+        avatarSettings["path_talk_1"] = ObsPath(talkA);
+        avatarSettings["path_talk_2"] = ObsPath(File.Exists(talkB) ? talkB : talkA);
+        avatarSettings["path_talk_3"] = ObsPath(talkA);
         avatarSettings["custom_avatars_path"] = ObsPath(avatarDirectory);
 
         var vTube = FindSource(sources, "VTube Studio Avatar") ?? throw new InvalidOperationException("The VTube Studio source is missing. Use Advanced → Repair once.");
@@ -281,7 +242,7 @@ public sealed class ObsService
                 }
             }
         }
-        File.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        AtomicFile.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
     }
 
     private static void ImportVerticalCanvasScene(string canvasUuid, AvatarMode avatarMode)
@@ -372,7 +333,7 @@ public sealed class ObsService
             }
             foreach (var name in sceneNames) order.Add(new JsonObject { ["name"] = name });
         }
-        File.WriteAllText(horizontalFile, horizontal.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        AtomicFile.WriteAllText(horizontalFile, horizontal.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
     }
 
     private static void SetSceneItemBox(JsonObject item, double x, double y, double width, double height)
@@ -404,7 +365,7 @@ public sealed class ObsService
         settings["capture_audio"] = true;
         settings["capture_cursor"] = false;
         settings["window"] = game.ObsWindowString;
-        File.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        AtomicFile.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
     }
 
     private static void AddSelection(ProcessStartInfo info, string profile, string collection, string scene)
