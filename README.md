@@ -2,7 +2,17 @@
 
 StreamKit is a portable Windows launcher for getting a game, a VTuber avatar, Discord screen share, Twitch and TikTok into one simple workflow.
 
-> **Quick start:** Extract the whole release ZIP, run `BPSRStreamKit.exe`, choose a stream mode, avatar, frame theme and running game, then press the main button.
+> **Quick start:** Extract the whole release ZIP, run `BPSRStreamKit.exe`, choose a stream mode, avatar, frame theme and running game, then press the main button. After your first successful share/stream, returning users get a compact one-click Quick Launch screen that reuses those saved choices.
+
+## Quick Launch for returning users
+
+After one successful share/stream, StreamKit remembers the selected game, avatar, frame and destination and opens a compact **Quick Launch** card on future starts. Existing v2.0.4 users are also recognized when StreamKit already has a remembered game and its portable OBS setup.
+
+- Press the main Quick Launch button to reuse the saved setup immediately.
+- Press **Customize setup** when you want the full 3-step screen again.
+- While customizing, the header shows **Quick Launch** so you can return to the compact view without restarting.
+- If the remembered game is not running, Quick Launch tells you which game to open; **Refresh** / **Find games** still works normally.
+- First-time users keep the guided 3-step setup until StreamKit has successfully prepared a share/stream once.
 
 ## Stream modes
 
@@ -120,7 +130,8 @@ StreamKit handles the repetitive pieces for you:
 - optional OBS Virtual Camera in All Platforms mode,
 - starting all configured Twitch/TikTok stream outputs together,
 - StreamKit scene/mic controls,
-- remembering your stream mode, avatar choice, frame theme and last game.
+- remembering your stream mode, avatar choice, frame theme and last game,
+- compact Quick Launch for returning users.
 
 VTube Studio, Twitch and TikTok still require their own legitimate account/model access. StreamKit does not bypass platform requirements.
 
