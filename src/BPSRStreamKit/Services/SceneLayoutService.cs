@@ -119,6 +119,13 @@ public sealed class SceneLayoutService
         var clean = CloneGameplayScene(baseScene, "Game Clean", vtube, avatarMode, showHud: false);
         var bpsr = CloneGameplayScene(baseScene, "BPSR", vtube, avatarMode, showHud: true);
 
+        // Legacy v2.0-v2.3 scenes were only cloning templates. Once Game Clean/BPSR are rebuilt,
+        // keeping them visible in OBS is confusing and provides no additional function.
+        RemoveSourceByName(sources, "Discord Share");
+        RemoveSourceByName(sources, "Twitch Live");
+        RemoveOrder(root, "Discord Share");
+        RemoveOrder(root, "Twitch Live");
+
         RemoveSourceByName(sources, "Game Clean");
         RemoveSourceByName(sources, "BPSR");
         sources.Add(clean);
