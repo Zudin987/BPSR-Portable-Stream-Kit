@@ -20,27 +20,34 @@ public sealed class ObsAutomationService
     private const string VTubeSenderName = "VTubeStudioSpout";
     private const string SpoutFirstAvailable = "usefirstavailablesender";
     private const string NoiseFilterName = "StreamKit RNNoise";
+    private static readonly object PasswordSync = new();
+    private static string? _sessionPassword;
     private static string KeyFile => Path.Combine(AppPaths.Root, "user-data", "obs-websocket.key");
 
     public static string GetOrCreatePassword()
     {
-        try
+        lock (PasswordSync)
         {
-            if (File.Exists(KeyFile))
-            {
-                var existing = File.ReadAllText(KeyFile).Trim();
-                if (existing.Length >= 20) return existing;
-            }
+            if (!string.IsNullOrWhiteSpace(_sessionPassword)) return _sessionPassword;
 
-            Directory.CreateDirectory(Path.GetDirectoryName(KeyFile)!);
+            try
+            {
+                if (File.Exists(KeyFile))
+                {
+                    var existing = File.ReadAllText(KeyFile).Trim();
+                    if (existing.Length >= 20)
+                    {
+                        _sessionPassword = existing;
+                        return existing;
+                    }
+                }
+            }
+            catch { }
+
             var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
-            File.WriteAllText(KeyFile, password);
+            _sessionPassword = password;
+            try { AtomicFile.WriteAllText(KeyFile, password); } catch { }
             return password;
-        }
-        catch
-        {
-            // Still use a strong per-process credential even if the portable folder is read-only.
-            return Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         }
     }
 
@@ -61,7 +68,7 @@ public sealed class ObsAutomationService
         root["alerts_enabled"] = false;
         root["auth_required"] = true;
         root["server_password"] = password;
-        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        AtomicFile.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
     public async Task<bool> WaitUntilReadyAsync(TimeSpan? timeout = null)
@@ -79,10 +86,33 @@ public sealed class ObsAutomationService
         return false;
     }
 
-    public async Task StartVirtualCameraAsync()
+    public async Task<bool> IsMainStreamActiveAsync()
     {
-        await WithSessionAsync(s => s.RequestAsync("StartVirtualCam"));
+        try
+        {
+            var response = await WithSessionAsync(s => s.RequestAsync("GetStreamStatus"));
+            return response?["outputActive"]?.GetValue<bool>() == true;
+        }
+        catch { return false; }
     }
+
+    public async Task StartMainStreamAsync()
+    {
+        if (await IsMainStreamActiveAsync()) return;
+        await WithSessionAsync(s => s.RequestAsync("StartStream"));
+    }
+
+    public async Task StopMainStreamAsync()
+    {
+        try
+        {
+            if (await IsMainStreamActiveAsync()) await WithSessionAsync(s => s.RequestAsync("StopStream"));
+        }
+        catch { }
+    }
+
+    public async Task StartVirtualCameraAsync() =>
+        await WithSessionAsync(s => s.RequestAsync("StartVirtualCam"));
 
     public async Task StopVirtualCameraAsync()
     {
@@ -98,17 +128,52 @@ public sealed class ObsAutomationService
         }));
     }
 
-    public async Task SetCurrentSceneAsync(string sceneName)
-    {
+    public async Task SetCurrentSceneAsync(string sceneName) =>
         await WithSessionAsync(s => s.RequestAsync("SetCurrentProgramScene", new JsonObject { ["sceneName"] = sceneName }));
-    }
 
     public async Task SwitchScenesAsync(string horizontalScene, string? verticalScene = null)
     {
         await SetCurrentSceneAsync(horizontalScene);
-        if (!string.IsNullOrWhiteSpace(verticalScene))
-            await SwitchVerticalSceneAsync(verticalScene);
+        if (!string.IsNullOrWhiteSpace(verticalScene)) await SwitchVerticalSceneAsync(verticalScene);
     }
+
+    public async Task SyncSceneItemTransformAsync(string sourceScene, string destinationScene, string sourceName)
+    {
+        try
+        {
+            await WithSessionAsync(async session =>
+            {
+                var sourceItems = await session.RequestAsync("GetSceneItemList", new JsonObject { ["sceneName"] = sourceScene });
+                var destinationItems = await session.RequestAsync("GetSceneItemList", new JsonObject { ["sceneName"] = destinationScene });
+                var sourceItem = FindSceneItem(sourceItems, sourceName);
+                var destinationItem = FindSceneItem(destinationItems, sourceName);
+                var sourceId = sourceItem?["sceneItemId"]?.GetValue<int>() ?? 0;
+                var destinationId = destinationItem?["sceneItemId"]?.GetValue<int>() ?? 0;
+                if (sourceId <= 0 || destinationId <= 0) return true;
+
+                var transform = await session.RequestAsync("GetSceneItemTransform", new JsonObject
+                {
+                    ["sceneName"] = sourceScene,
+                    ["sceneItemId"] = sourceId
+                });
+                var data = transform?["sceneItemTransform"]?.DeepClone();
+                if (data is null) return true;
+
+                await session.RequestAsync("SetSceneItemTransform", new JsonObject
+                {
+                    ["sceneName"] = destinationScene,
+                    ["sceneItemId"] = destinationId,
+                    ["sceneItemTransform"] = data
+                });
+                return true;
+            });
+        }
+        catch { }
+    }
+
+    private static JsonObject? FindSceneItem(JsonObject? response, string sourceName) =>
+        response?["sceneItems"]?.AsArray()?.OfType<JsonObject>()
+            .FirstOrDefault(x => string.Equals(x["sourceName"]?.GetValue<string>(), sourceName, StringComparison.Ordinal));
 
     public async Task SetMicMutedAsync(bool muted)
     {
@@ -240,8 +305,7 @@ public sealed class ObsAutomationService
                 {
                     if (await HasTransparentVTubeFrameAsync())
                     {
-                        try { await AutoFitVTubeStudioAvatarAsync(); }
-                        catch { }
+                        try { await AutoFitVTubeStudioAvatarAsync(); } catch { }
                         return true;
                     }
                 }
@@ -506,20 +570,15 @@ public sealed class ObsAutomationService
         catch { return false; }
     }
 
-    public async Task StartAllStreamsAsync()
-    {
-        await CallAitumAsync("start_all_streams");
-    }
+    public async Task StartAllStreamsAsync() => await CallAitumAsync("start_all_streams");
 
     public async Task StopAllStreamsAsync()
     {
         try { await CallAitumAsync("stop_all_streams"); } catch { }
     }
 
-    public async Task SwitchVerticalSceneAsync(string sceneName = "Vertical Live")
-    {
+    public async Task SwitchVerticalSceneAsync(string sceneName = "Vertical Live") =>
         await CallAitumAsync("switch_scene", new JsonObject { ["canvas"] = "Vertical", ["scene"] = sceneName });
-    }
 
     public async Task<string?> GetVerticalCanvasUuidAsync()
     {
