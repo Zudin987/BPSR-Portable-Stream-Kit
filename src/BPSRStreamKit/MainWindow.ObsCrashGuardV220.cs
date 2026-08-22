@@ -41,20 +41,20 @@ public partial class MainWindow
             if (string.IsNullOrWhiteSpace(expectedExe)) return;
             var expectedPath = Path.GetFullPath(expectedExe);
 
-            EnumWindows((hwnd, _) =>
+            EnumWindowsCrashV220((hwnd, _) =>
             {
                 try
                 {
-                    if (!IsWindowVisible(hwnd)) return true;
-                    var length = GetWindowTextLength(hwnd);
+                    if (!IsWindowVisibleCrashV220(hwnd)) return true;
+                    var length = GetWindowTextLengthCrashV220(hwnd);
                     if (length <= 0) return true;
 
                     var title = new StringBuilder(length + 1);
-                    _ = GetWindowText(hwnd, title, title.Capacity);
+                    _ = GetWindowTextCrashV220(hwnd, title, title.Capacity);
                     if (!title.ToString().Contains("OBS Studio Crash Detected", StringComparison.OrdinalIgnoreCase))
                         return true;
 
-                    _ = GetWindowThreadProcessId(hwnd, out var pid);
+                    _ = GetWindowThreadProcessIdCrashV220(hwnd, out var pid);
                     using var process = Process.GetProcessById((int)pid);
                     string? actualPath = null;
                     try { actualPath = process.MainModule?.FileName; } catch { }
@@ -71,9 +71,9 @@ public partial class MainWindow
 
                     _lastObsCrashDialogV220 = hwnd;
                     _lastObsCrashDialogActionUtcV220 = DateTime.UtcNow;
-                    _ = SetForegroundWindow(hwnd);
-                    _ = PostMessage(hwnd, WmKeyDown, new IntPtr(VkReturn), IntPtr.Zero);
-                    _ = PostMessage(hwnd, WmKeyUp, new IntPtr(VkReturn), IntPtr.Zero);
+                    _ = SetForegroundWindowCrashV220(hwnd);
+                    _ = PostMessageCrashV220(hwnd, WmKeyDownV220, new IntPtr(VkReturnV220), IntPtr.Zero);
+                    _ = PostMessageCrashV220(hwnd, WmKeyUpV220, new IntPtr(VkReturnV220), IntPtr.Zero);
                     FooterStatus.Text = "OBS recovered in Normal Mode · continuing setup automatically";
                     return false;
                 }
@@ -83,30 +83,30 @@ public partial class MainWindow
         catch { }
     }
 
-    private const uint WmKeyDown = 0x0100;
-    private const uint WmKeyUp = 0x0101;
-    private const int VkReturn = 0x0D;
+    private const uint WmKeyDownV220 = 0x0100;
+    private const uint WmKeyUpV220 = 0x0101;
+    private const int VkReturnV220 = 0x0D;
 
     private delegate bool ObsCrashEnumWindowsProcV220(IntPtr hwnd, IntPtr lParam);
 
-    [DllImport("user32.dll")]
-    private static extern bool EnumWindows(ObsCrashEnumWindowsProcV220 lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll", EntryPoint = "EnumWindows")]
+    private static extern bool EnumWindowsCrashV220(ObsCrashEnumWindowsProcV220 lpEnumFunc, IntPtr lParam);
 
-    [DllImport("user32.dll")]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll", EntryPoint = "IsWindowVisible")]
+    private static extern bool IsWindowVisibleCrashV220(IntPtr hWnd);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetWindowTextW")]
+    private static extern int GetWindowTextCrashV220(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
-    [DllImport("user32.dll")]
-    private static extern int GetWindowTextLength(IntPtr hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetWindowTextLengthW")]
+    private static extern int GetWindowTextLengthCrashV220(IntPtr hWnd);
 
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("user32.dll", EntryPoint = "GetWindowThreadProcessId")]
+    private static extern uint GetWindowThreadProcessIdCrashV220(IntPtr hWnd, out uint lpdwProcessId);
 
-    [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll", EntryPoint = "SetForegroundWindow")]
+    private static extern bool SetForegroundWindowCrashV220(IntPtr hWnd);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll", SetLastError = true, EntryPoint = "PostMessageW")]
+    private static extern bool PostMessageCrashV220(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 }
