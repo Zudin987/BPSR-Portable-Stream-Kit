@@ -4,7 +4,7 @@ using BPSRStreamKit.Infrastructure;
 
 namespace BPSRStreamKit.Services;
 
-public sealed class ObsProcessV220
+public sealed class ObsProcessService
 {
     private const uint WmClose = 0x0010;
 
@@ -12,10 +12,7 @@ public sealed class ObsProcessV220
     {
         var processes = GetPortableObsProcesses();
         try { return processes.Count > 0; }
-        finally
-        {
-            foreach (var process in processes) process.Dispose();
-        }
+        finally { foreach (var process in processes) process.Dispose(); }
     }
 
     public async Task<bool> CloseGracefullyAsync(TimeSpan? timeout = null)
@@ -25,26 +22,9 @@ public sealed class ObsProcessV220
 
         try
         {
-            foreach (var process in processes)
-            {
-                try
-                {
-                    process.Refresh();
-                    if (process.HasExited) continue;
-                    var hwnd = process.MainWindowHandle;
-                    if (hwnd != IntPtr.Zero)
-                    {
-                        _ = PostMessage(hwnd, WmClose, IntPtr.Zero, IntPtr.Zero);
-                    }
-                    else
-                    {
-                        try { process.CloseMainWindow(); } catch { }
-                    }
-                }
-                catch { }
-            }
+            foreach (var process in processes) RequestClose(process);
 
-            var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(18));
+            var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(20));
             while (DateTime.UtcNow < until)
             {
                 var remaining = 0;
@@ -55,26 +35,23 @@ public sealed class ObsProcessV220
                         process.Refresh();
                         if (process.HasExited) continue;
                         remaining++;
-                        var hwnd = process.MainWindowHandle;
-                        if (hwnd != IntPtr.Zero) _ = PostMessage(hwnd, WmClose, IntPtr.Zero, IntPtr.Zero);
                     }
                     catch { }
                 }
+
                 if (remaining == 0) return true;
-                await Task.Delay(500);
+                await Task.Delay(400);
             }
 
-            // Force close is only a last resort after OBS/plugins had time to save state.
+            // Last resort only. A normal WM_CLOSE gets the full timeout so OBS/plugins can save state.
             foreach (var process in processes)
             {
                 try
                 {
                     process.Refresh();
-                    if (!process.HasExited)
-                    {
-                        process.Kill(entireProcessTree: true);
-                        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(4));
-                    }
+                    if (process.HasExited) continue;
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(4));
                 }
                 catch { }
             }
@@ -86,22 +63,35 @@ public sealed class ObsProcessV220
         }
     }
 
+    private static void RequestClose(Process process)
+    {
+        try
+        {
+            process.Refresh();
+            if (process.HasExited) return;
+            var hwnd = process.MainWindowHandle;
+            if (hwnd != IntPtr.Zero) _ = PostMessage(hwnd, WmClose, IntPtr.Zero, IntPtr.Zero);
+            else _ = process.CloseMainWindow();
+        }
+        catch { }
+    }
+
     private static List<Process> GetPortableObsProcesses()
     {
         var result = new List<Process>();
         var obsExe = AppPaths.FindObsExe();
         if (string.IsNullOrWhiteSpace(obsExe)) return result;
 
-        var expected = Path.GetFullPath(obsExe);
-        var name = Path.GetFileNameWithoutExtension(obsExe);
-        foreach (var process in Process.GetProcessesByName(name))
+        var expectedPath = Path.GetFullPath(obsExe);
+        var processName = Path.GetFileNameWithoutExtension(obsExe);
+        foreach (var process in Process.GetProcessesByName(processName))
         {
             var keep = false;
             try
             {
-                var actual = process.MainModule?.FileName;
-                keep = !string.IsNullOrWhiteSpace(actual)
-                       && Path.GetFullPath(actual).Equals(expected, StringComparison.OrdinalIgnoreCase);
+                var actualPath = process.MainModule?.FileName;
+                keep = !string.IsNullOrWhiteSpace(actualPath)
+                       && Path.GetFullPath(actualPath).Equals(expectedPath, StringComparison.OrdinalIgnoreCase);
             }
             catch { }
 

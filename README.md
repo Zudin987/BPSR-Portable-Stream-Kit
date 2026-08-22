@@ -1,201 +1,215 @@
 # StreamKit — Portable Game + VTuber Streaming
 
-StreamKit is a portable Windows launcher for getting a game, a VTuber avatar, Discord screen share, Twitch and TikTok into one simple workflow.
+StreamKit is a portable Windows launcher that turns a game, VTuber avatar, Discord screen share and Twitch/TikTok streaming into one beginner-friendly workflow. The launcher owns the complicated OBS setup so normal use stays focused on **game → avatar → destination → start**.
 
-> **Quick start:** Extract the whole release ZIP, run `BPSRStreamKit.exe`, choose a stream mode, avatar, frame theme and running game, then press the main button. After your first successful share/stream, returning users get a compact one-click Quick Launch screen that reuses those saved choices.
-
-## Quick Launch for returning users
-
-After one successful share/stream, StreamKit remembers the selected game, avatar, frame and destination and opens a compact **Quick Launch** card on future starts. Existing v2.0.4 users are also recognized when StreamKit already has a remembered game and its portable OBS setup.
-
-- Press the main Quick Launch button to reuse the saved setup immediately.
-- Press **Customize setup** when you want the full 3-step screen again.
-- While customizing, the header shows **Quick Launch** so you can return to the compact view without restarting.
-- If the remembered game is not running, Quick Launch tells you which game to open; **Refresh** / **Find games** still works normally.
-- First-time users keep the guided 3-step setup until StreamKit has successfully prepared a share/stream once.
+> **Quick start:** Extract the complete release ZIP, run `BPSRStreamKit.exe`, open your game, choose an avatar/frame/destination and press the main button. After the first successful start, StreamKit remembers those choices and opens **Quick Launch** for returning users.
 
 ## Stream modes
 
-### Discord Share
+### Discord only
 
-This is the fastest mode and is designed to avoid double microphone audio.
+Use this when you only want to share with friends.
 
 1. Open the game.
-2. Run StreamKit.
-3. Choose **Discord Share**.
-4. Leave **Full VTuber** selected if you want VTube Studio, or choose PNG Avatar / None.
-5. Press **Open Discord Share**.
-6. StreamKit opens VTube Studio when needed, prepares portable OBS and automatically opens **Windowed Projector (Program)**.
-7. In Discord choose **Share Your Screen** and select the OBS Windowed Projector window with sound.
-8. Keep your normal Discord microphone selected.
+2. Run StreamKit and select **Discord only**.
+3. Choose Full VTuber, Simple Talking Avatar or No Avatar.
+4. Press **Start Discord Share**.
+5. In Discord, share the clean OBS Program Projector window with sound.
 
-Discord share audio is intentionally **game audio only**. StreamKit mutes the OBS microphone in Discord-only mode so your friends do not hear your voice twice. Your normal Discord microphone remains the voice path.
+StreamKit sends the selected game audio to the projector while keeping the OBS microphone out of Discord-only mode. Your normal Discord microphone remains your voice path, so your voice is not doubled.
 
-### Discord + Twitch + TikTok
+### Discord + Twitch (+ TikTok)
 
-This mode uses one portable OBS instance with separate horizontal and vertical outputs:
+TikTok is **optional** in v2.3.0.
 
-- **Discord:** clean Windowed Projector (Program); OBS Virtual Camera also remains available as a fallback.
-- **Twitch:** main 1920×1080 horizontal canvas.
-- **TikTok:** Aitum 1080×1920 vertical canvas.
+- **Discord:** clean Program Projector window.
+- **Twitch:** normal 1920×1080 horizontal output.
+- **TikTok, when configured:** Aitum 1080×1920 Vertical output.
 
-On first use StreamKit installs the pinned Aitum Stream Suite plugin, creates the vertical canvas and prepares matching horizontal/vertical layouts.
+If TikTok is not configured, the main action is **Start Twitch + Discord** and Aitum is not installed/initialized just to satisfy an unused feature. You can stream Twitch + Discord normally and add TikTok later.
 
-There is one unavoidable account step the first time:
+To connect Twitch, open **Advanced settings → Open streaming engine**, then use OBS **Settings → Stream → Twitch → Connect Account**.
 
-1. In portable OBS **Settings → Stream**, connect Twitch.
-2. In **Aitum Stream Suite → Settings → Outputs**, add a TikTok stream output.
-3. Choose the **Vertical** canvas and enter the TikTok server/key provided to your account.
-4. Close OBS when finished.
+To add TikTok later:
 
-After that, **Start All Platforms** starts Twitch + TikTok together and opens the Discord share projector.
+1. Select **Discord + Twitch (+ TikTok)**.
+2. Click **Add TikTok later**.
+3. Click **Open TikTok setup**. StreamKit installs/prepares Aitum only at this point if necessary.
+4. In Aitum Outputs, add a **Stream** using the **Vertical** canvas.
+5. Paste the TikTok RTMP server + stream key granted to your TikTok account.
+6. Return to StreamKit and click **Check TikTok**.
 
-TikTok requires LIVE/stream-key access on the TikTok account. StreamKit cannot grant that access.
+If the TikTok check fails, Twitch and Discord remain usable. StreamKit cannot grant TikTok LIVE or stream-key access.
 
-## Private audio routing
+## Quick Launch
 
-StreamKit deliberately avoids global desktop audio.
+After a successful start, StreamKit remembers the selected game, avatar, frame theme and destination.
 
-- The selected game is captured directly with its own application/game audio.
-- Twitch/TikTok receive **selected-game audio + Mic/Aux only**.
-- Desktop/system loopback audio is disabled, so Discord friends, notification sounds and unrelated applications are not intentionally sent to Twitch/TikTok.
-- The OBS microphone gets the built-in **RNNoise** noise-suppression filter automatically.
-- In Discord-only mode, the OBS mic is muted and not monitored; Discord uses your normal Discord mic instead.
-- In All Platforms mode, the OBS mic goes to Twitch/TikTok but is not monitored into the Discord projector audio path.
+Returning users see one compact card with the remembered setup and one primary start button. **Customize setup** returns to the full 3-step screen, and **Quick Launch** in the header switches back without restarting the app.
 
-The Discord projector obtains game sound from OBS's selected-game monitoring path. No default Display Capture or Desktop Audio source is required.
+If the remembered game is not running, Quick Launch tells you which game to open rather than silently failing.
 
-## Stream controls
+## Four scene controls
 
-Once a stream/share is prepared, StreamKit exposes simple controls so OBS can stay in the background:
+When OBS is prepared, StreamKit exposes four direct scene buttons:
 
-- **Starting Soon** — switches the horizontal scene and TikTok vertical scene together.
-- **Live** — returns to the game + VTuber layout.
-- **BRB** — switches both layouts to the BRB screen.
-- **Mute Mic / Unmute Mic** — controls the OBS mic used by Twitch/TikTok. In Discord-only mode this control is locked because the OBS mic intentionally stays out of the Discord share.
-- **Stop Stream** — stops configured streams/Virtual Camera and closes StreamKit's portable OBS while leaving VTube Studio open.
+- **Starting Soon** — intermission before gameplay.
+- **BRB** — away screen.
+- **Game Clean** — game + selected frame + avatar, without the BPSR utility HUD.
+- **BPSR** — game + frame + avatar + DPS meter + dungeon-mechanic HUD.
 
-The main button becomes **Reopen Discord Share** while active, so the clean projector can be reopened without rebuilding the stream.
+When a TikTok Vertical output is active, StreamKit switches the horizontal and vertical versions together. Without TikTok, the same four buttons control only the active horizontal share/stream and do not attempt an Aitum command.
+
+The microphone button is available for public streaming. **Stop everything** stops public outputs/Virtual Camera, restores audio monitoring and asks portable OBS to close normally so it can save plugin/config state.
 
 ## Avatar modes
 
 ### Full VTuber — recommended
 
-Uses **VTube Studio + Spout2** as the main avatar and hides the old PNG/FloodTuber source.
+Uses **VTube Studio + Spout2**. StreamKit installs the pinned portable Spout2 OBS plugin when this mode requires it and verifies that VTube Studio is actually producing a useful transparent frame.
 
-StreamKit automatically installs the pinned portable Spout2 OBS plugin and creates the `VTube Studio Avatar` source with sender `VTubeStudioSpout` and **Premultiplied Alpha**. This avoids capturing the VTube Studio window/background/UI.
+One-time VTube Studio setup:
 
-VTube Studio only needs a small one-time setup:
-
-1. Choose your Live2D model and webcam/tracker in VTube Studio.
-2. Turn on **Spout2 output** in VTube Studio.
-3. Select **Color Picker Background**.
+1. Open your Live2D model.
+2. Turn on **Spout2 output**.
+3. Use **Color Picker Background**.
 4. Enable **Transparent in capture**.
-5. Leave the Spout sender name as `VTubeStudioSpout` for the normal single-instance setup.
+5. Keep VTube Studio open and use **Check my avatar** in StreamKit.
 
-StreamKit no longer trusts the instruction screen alone: after OBS opens it takes a small source screenshot and checks that VTube Studio is actually producing a useful transparent Spout frame. The one-time setup is only marked complete after that check passes.
+VTube Studio handles webcam tracking, blinking, mouth motion, expressions and physics. The webcam image itself is not added to StreamKit's scene.
 
-Webcam face tracking, head motion, blinking, mouth movement, expressions and Live2D physics remain handled by VTube Studio. The webcam image itself is not added to the stream scene.
+StreamKit also waits for an already-starting VTube Studio process instead of repeatedly asking Steam to launch it.
 
-### PNG Avatar
+### Simple Talking Avatar
 
-Uses the existing lightweight FloodTuber avatar. This is kept as a fallback for PCs or users that do not want webcam tracking.
+Uses the bundled FloodTuber-based PNG avatar. The talking animation uses both `talk_a.png` and `talk_b.png` when available.
 
-### None
+### No Avatar
 
-Hides both avatar systems and streams only the game + selected frame.
+Shows only the selected game and frame.
+
+## Private audio routing
+
+StreamKit intentionally avoids global desktop capture.
+
+- The selected game is captured directly with its own audio.
+- Public streams receive **selected game + OBS Mic/Aux**.
+- Desktop/system loopback audio is disabled so Discord friends, notification sounds and unrelated applications are not intentionally sent to Twitch/TikTok.
+- The public-stream microphone receives OBS RNNoise suppression automatically.
+- Discord-only mode keeps OBS Mic/Aux muted so Discord continues using your normal Discord microphone.
+
+## Reliability and safety behavior
+
+v2.3.0 consolidates the launcher around one controller instead of the older version-specific compatibility layers.
+
+- One canonical start/stop/scene workflow.
+- One OBS WebSocket protocol implementation with a local authenticated connection.
+- One stable per-process WebSocket credential even if the StreamKit folder becomes read-only.
+- Atomic writes for critical scene/preferences/catalog/WebSocket configuration files.
+- Periodic game/setup status scans are gated so refreshes do not overlap each other.
+- Process handles used for detection are disposed after each scan.
+- Normal OBS launches no longer secretly kill a previous portable OBS process.
+- Shutdown requests a graceful OBS close first and only force-terminates after a long timeout as a last resort.
+- If OBS 32 shows its **Crash Detected** dialog for StreamKit's own portable OBS, StreamKit continues in **Normal Mode**, because Safe Mode disables the plugins/WebSockets StreamKit requires.
+
+A separately installed OBS instance is not targeted by StreamKit's portable-process controls.
+
+## UI behavior
+
+The main window is designed around a minimum size of 1040×760 and uses wrapping/trimming instead of allowing dynamic text to overlap adjacent controls. Long game/theme/avatar labels are trimmed with tooltips, descriptive copy wraps, the four scene buttons stay in one equal-width row, and Mic/Stop controls use a separate lower row.
+
+Waiting operations such as OBS/VTube startup use an indeterminate progress bar instead of incorrectly showing `100%` while work is still happening.
+
+Errors are surfaced in the app with context-specific recovery actions such as **Find games**, **Avatar help**, **Open TikTok setup**, **Retry** or **Fix setup** instead of routing every failure to the same generic repair button.
 
 ## Frame themes
 
-**Profile A — Sakura** uses the pink/purple Sakura frame and matching Starting Soon / BRB screens.
+- **Sakura** — pink/purple minimal frame with matching Starting Soon / BRB screens.
+- **Chibi Doctor** — cyan/white medical frame with matching Starting Soon / BRB screens.
 
-**Profile B — Chibi Doctor** uses the cyan/white medical frame and matching Starting Soon / BRB screens.
-
-The frame theme is independent from the avatar mode. A full VTube Studio model can therefore use either frame.
+The frame theme is independent from the avatar mode.
 
 ## What StreamKit automates
 
-StreamKit handles the repetitive pieces for you:
+StreamKit currently handles:
 
 - portable OBS setup,
-- Spout2 transparent VTube Studio capture and runtime verification,
-- FloodTuber fallback setup,
-- Aitum Stream Suite setup for multistream mode,
-- local authenticated OBS WebSocket automation,
-- selected-game video + audio capture,
-- private audio hardening and RNNoise mic suppression,
-- horizontal Twitch/Discord scene,
-- vertical TikTok scenes including Starting Soon / Live / BRB,
-- automatic Discord Program projector,
-- optional OBS Virtual Camera in All Platforms mode,
-- starting all configured Twitch/TikTok stream outputs together,
-- StreamKit scene/mic controls,
-- remembering your stream mode, avatar choice, frame theme and last game,
-- compact Quick Launch for returning users.
-
-VTube Studio, Twitch and TikTok still require their own legitimate account/model access. StreamKit does not bypass platform requirements.
-
-## OBS updates
-
-StreamKit treats portable OBS and its plugins as a **tested pinned bundle**. To avoid OBS updating itself independently and potentially breaking FloodTuber, Spout2 or Aitum compatibility, StreamKit disables OBS's built-in update checks for its portable OBS instance.
-
-This is intentional. Update the streaming engine by moving to a newer StreamKit release after its OBS/plugin combination has been tested, rather than accepting an OBS self-update prompt inside the portable copy.
-
-This setting affects only the OBS copy inside the StreamKit folder. A separate normally-installed OBS installation is not changed.
-
-## Privacy and local credentials
-
-The default scene is designed around **selected game + microphone**, not full desktop capture.
-
-Twitch/TikTok credentials, OAuth data, Aitum outputs and the local OBS WebSocket password stay inside the extracted StreamKit folder on the user's PC. They are not part of the repository or release ZIP.
-
-Never commit or share:
-
-- OBS `service.json`,
-- Twitch/TikTok stream keys,
-- OAuth/login tokens,
-- browser cookies,
-- your generated `user-data/` files,
-- an already-used portable OBS config folder containing account credentials.
+- selected-game capture + game-only audio,
+- local OBS WebSocket control,
+- private audio hardening,
+- RNNoise microphone cleanup,
+- VTube Studio Spout capture and validation,
+- FloodTuber fallback avatar,
+- horizontal scenes for Discord/Twitch,
+- optional vertical TikTok scenes,
+- automatic Discord Program Projector,
+- optional Virtual Camera in public mode,
+- Starting Soon / BRB / Game Clean / BPSR scene control,
+- graceful public-output/OBS shutdown,
+- saved game/avatar/theme/destination preferences,
+- returning-user Quick Launch.
 
 ## First-run downloads
 
-StreamKit currently pins:
+The tested bundle currently pins:
 
-- **OBS Studio 32.2.1** — official OBS GitHub release, SHA-256 verified.
-- **Spout2 OBS plugin 1.12.0** — official Off-World-Live portable release, SHA-256 verified; installed when Full VTuber mode needs it.
-- **FloodTuber 1.1.0** — official FloodTuber release; used for PNG fallback mode.
-- **Aitum Stream Suite 1.2.1** — official Aitum GitHub release; installed only when All Platforms mode needs it.
+- **OBS Studio 32.2.1** — official OBS release, SHA-256 verified.
+- **Spout2 OBS plugin 1.12.0** — official Off-World-Live portable release, installed only when Full VTuber needs it.
+- **FloodTuber 1.1.0** — PNG-avatar fallback.
+- **Aitum Stream Suite 1.2.1** — installed/prepared only when TikTok setup/output requires it.
 
-VTube Studio is launched through its normal Steam app (**Steam App 1325860**) instead of being bundled with StreamKit.
+VTube Studio is launched through its normal Steam app (**Steam App 1325860**) and is not bundled with StreamKit.
+
+## OBS updates
+
+Portable OBS and its plugins are treated as one tested bundle. OBS self-update checks are disabled for StreamKit's portable copy so OBS cannot update independently and break FloodTuber, Spout2 or Aitum compatibility.
+
+Update the streaming engine by moving to a newer tested StreamKit release instead. A separate normally installed OBS copy is not modified.
+
+## Privacy and local credentials
+
+Twitch/TikTok credentials, OAuth data, Aitum outputs and the generated OBS WebSocket password stay in the extracted StreamKit folder. They are excluded from the repository/release source by `.gitignore` rules.
+
+Never commit or share an already-used portable OBS configuration containing:
+
+- `service.json`,
+- Twitch/TikTok stream keys,
+- OAuth/login tokens,
+- cookies,
+- generated `user-data/`,
+- other local account credentials.
 
 ## Game detection
 
-Open the game first. StreamKit scans visible running application windows. If the game is not listed, press **Scan games**.
+Open the game first. StreamKit scans visible application windows and remembers up to a small set of recently selected games. If the game is missing, use **Find games**.
 
-The historical internal project/scene names still contain `BPSR` for compatibility with existing installs. User-facing behavior is game-generic.
+Historical internal project/scene names still contain `BPSR` for compatibility with existing StreamKit installs; the launcher itself can capture other normal windowed games.
 
-## Repair / advanced controls
+## Advanced / repair
 
-Advanced controls provide:
+Advanced settings intentionally keep technical controls out of the normal workflow:
 
-- **VTube Studio** — open it through Steam,
-- **Open OBS** — inspect/edit the portable OBS setup,
-- **Open folder** — open the StreamKit folder,
-- **Repair** — restore missing runtime/plugin/layout files and re-apply private audio hardening while preserving existing local account/output settings where possible.
+- **Open avatar app**
+- **Open streaming engine**
+- **Open folder**
+- **Fix setup**
+
+Repair restores missing runtime/plugin/template files and re-applies StreamKit's safe configuration where possible while preserving local account/output data.
 
 ## Building from source
 
-The launcher targets .NET 8 on Windows:
+The launcher targets .NET 8 / Windows x64:
 
 ```text
 dotnet restore src/BPSRStreamKit/BPSRStreamKit.csproj
 dotnet publish src/BPSRStreamKit/BPSRStreamKit.csproj -c Release -r win-x64 --self-contained true
 ```
 
+GitHub Actions also builds the Windows package for pull requests and publishes release branches named `release/v*`.
+
 ## Project source licence status
 
-This private repository currently does **not** contain a project-wide `LICENSE` file. Third-party licences do not automatically grant a licence to original StreamKit source/assets.
+This repository currently does **not** contain a project-wide `LICENSE` file. Third-party licences do not automatically grant a licence to original StreamKit source/assets.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party notices.
 

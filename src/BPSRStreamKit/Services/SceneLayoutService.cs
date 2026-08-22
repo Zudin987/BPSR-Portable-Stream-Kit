@@ -1,4 +1,3 @@
-using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using BPSRStreamKit.Infrastructure;
@@ -6,7 +5,7 @@ using BPSRStreamKit.Models;
 
 namespace BPSRStreamKit.Services;
 
-public sealed class SceneLayoutV220Service
+public sealed class SceneLayoutService
 {
     private const string SelectedGameSource = "Selected Game + Audio";
     private const string LegacyGameSource = "BPSR Game + Audio";
@@ -59,8 +58,7 @@ public sealed class SceneLayoutV220Service
         var bpsrItems = bpsrSettings["items"]?.AsArray() ?? new JsonArray();
         bpsrSettings["items"] = bpsrItems;
 
-        var sourceSettings = verticalBase["settings"]?.AsObject();
-        var sourceItems = sourceSettings?["items"]?.AsArray();
+        var sourceItems = verticalBase["settings"]?["items"]?.AsArray();
         var nextId = bpsrItems.OfType<JsonObject>().Select(x => x["id"]?.GetValue<int>() ?? 0).DefaultIfEmpty().Max() + 1;
 
         foreach (var pair in new[]
@@ -278,6 +276,7 @@ public sealed class SceneLayoutV220Service
         {
             vtube["source_uuid"] = vtubeSource["uuid"]?.GetValue<string>();
         }
+
         vtube["visible"] = avatarMode == AvatarMode.VTubeStudio;
         settings["id_counter"] = items.OfType<JsonObject>().Select(x => x["id"]?.GetValue<int>() ?? 0).DefaultIfEmpty().Max();
     }
@@ -300,7 +299,7 @@ public sealed class SceneLayoutV220Service
         ?? throw new InvalidDataException($"Scene file '{Path.GetFileName(path)}' could not be read.");
 
     private static void WriteObject(string path, JsonObject root) =>
-        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        AtomicFile.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
 
     private static JsonArray Sources(JsonObject root) =>
         root["sources"]?.AsArray() ?? throw new InvalidDataException("OBS scene collection has no sources array.");

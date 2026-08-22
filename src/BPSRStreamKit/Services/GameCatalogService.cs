@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -37,8 +36,7 @@ public sealed class GameCatalogService
                     AddUnique(result, saved with { IsRunning = false });
             }
 
-            foreach (var candidate in windows)
-                AddUnique(result, candidate);
+            foreach (var candidate in windows) AddUnique(result, candidate);
 
             return result
                 .OrderByDescending(x => x.IsRunning)
@@ -49,28 +47,34 @@ public sealed class GameCatalogService
 
     public string? GetLastSelectedProcess()
     {
-        try { return File.Exists(_lastSelectionPath) ? File.ReadAllText(_lastSelectionPath).Trim() : null; }
+        try
+        {
+            if (!File.Exists(_lastSelectionPath)) return null;
+            var value = File.ReadAllText(_lastSelectionPath).Trim();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
         catch { return null; }
     }
 
     public void SaveLastSelectedProcess(string processName)
     {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(_lastSelectionPath)!);
-            File.WriteAllText(_lastSelectionPath, processName);
-        }
+        if (string.IsNullOrWhiteSpace(processName)) return;
+        try { AtomicFile.WriteAllText(_lastSelectionPath, processName.Trim()); }
         catch { }
     }
 
     public void Save(GameTarget target)
     {
-        var saved = LoadSaved().Where(x => !x.ProcessName.Equals(target.ProcessName, StringComparison.OrdinalIgnoreCase)).ToList();
-        saved.Insert(0, target with { IsRunning = false });
-        if (saved.Count > 12) saved = saved.Take(12).ToList();
-
-        Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(saved, new JsonSerializerOptions { WriteIndented = true }));
+        try
+        {
+            var saved = LoadSaved()
+                .Where(x => !x.ProcessName.Equals(target.ProcessName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            saved.Insert(0, target with { IsRunning = false });
+            if (saved.Count > 12) saved = saved.Take(12).ToList();
+            AtomicFile.WriteAllText(_settingsPath, JsonSerializer.Serialize(saved, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch { }
     }
 
     private List<GameTarget> LoadSaved()
@@ -80,10 +84,7 @@ public sealed class GameCatalogService
             if (!File.Exists(_settingsPath)) return new List<GameTarget>();
             return JsonSerializer.Deserialize<List<GameTarget>>(File.ReadAllText(_settingsPath)) ?? new List<GameTarget>();
         }
-        catch
-        {
-            return new List<GameTarget>();
-        }
+        catch { return new List<GameTarget>(); }
     }
 
     private static void AddUnique(List<GameTarget> list, GameTarget item)
@@ -96,8 +97,9 @@ public sealed class GameCatalogService
     {
         var results = new List<GameTarget>();
 
-        EnumWindows((hwnd, lParam) =>
+        EnumWindows((hwnd, unused) =>
         {
+            _ = unused;
             try
             {
                 if (!IsWindowVisible(hwnd)) return true;
@@ -123,15 +125,16 @@ public sealed class GameCatalogService
                 var windowClass = classBuilder.ToString();
                 if (string.IsNullOrWhiteSpace(windowClass)) return true;
 
-                var display = MakeFriendlyName(title, processName);
-                results.Add(new GameTarget(display, processName, exeName, title, windowClass,
-                    processName.Equals("StarSEA", StringComparison.OrdinalIgnoreCase), true));
+                results.Add(new GameTarget(
+                    MakeFriendlyName(title, processName),
+                    processName,
+                    exeName,
+                    title,
+                    windowClass,
+                    processName.Equals("StarSEA", StringComparison.OrdinalIgnoreCase),
+                    true));
             }
-            catch
-            {
-                // Protected or closing windows are ignored.
-            }
-
+            catch { }
             return true;
         }, IntPtr.Zero);
 
@@ -147,11 +150,11 @@ public sealed class GameCatalogService
         foreach (var separator in separators)
         {
             var first = title.Split(separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(first) && first.Length >= 3 && first.Length <= 48)
-                return first;
+            if (!string.IsNullOrWhiteSpace(first) && first.Length is >= 3 and <= 48) return first;
         }
 
-        return title.Length <= 52 ? title : processName;
+        if (title.Length <= 52) return title;
+        return processName.Length <= 52 ? processName : processName[..52];
     }
 
     private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
@@ -159,20 +162,15 @@ public sealed class GameCatalogService
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindowVisible(IntPtr hWnd);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
     [DllImport("user32.dll")]
     private static extern int GetWindowTextLength(IntPtr hWnd);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 }

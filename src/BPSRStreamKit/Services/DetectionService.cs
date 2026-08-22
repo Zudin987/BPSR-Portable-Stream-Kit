@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO;
 using BPSRStreamKit.Infrastructure;
 using BPSRStreamKit.Models;
 
@@ -13,8 +12,8 @@ public sealed class DetectionService
         {
             var obsPath = AppPaths.FindObsExe();
             var processName = selectedGame?.ProcessName ?? "StarSEA";
-            var game = FindProcess(processName);
-            var logs = FindProcess("resonance-logs-cn");
+            var game = GetProcessInfo(processName);
+            var logs = GetProcessInfo("resonance-logs-cn");
 
             var obsRoot = AppPaths.FindObsRoot();
             var avatarReady = obsRoot is not null
@@ -28,56 +27,78 @@ public sealed class DetectionService
                 try
                 {
                     var pluginRoot = Path.Combine(obsRoot, "obs-plugins");
-                    aitumReady = Directory.Exists(pluginRoot) && Directory.EnumerateFiles(pluginRoot, "*.dll", SearchOption.AllDirectories)
-                        .Any(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase));
+                    aitumReady = Directory.Exists(pluginRoot)
+                                 && Directory.EnumerateFiles(pluginRoot, "*.dll", SearchOption.AllDirectories)
+                                     .Any(x => Path.GetFileName(x).Contains("aitum", StringComparison.OrdinalIgnoreCase));
                 }
                 catch { }
             }
-
-            var vtubeRunning = false;
-            try
-            {
-                vtubeRunning = Process.GetProcesses().Any(p =>
-                {
-                    try
-                    {
-                        using (p)
-                            return p.ProcessName.Replace(" ", string.Empty, StringComparison.Ordinal)
-                                .Contains("VTubeStudio", StringComparison.OrdinalIgnoreCase);
-                    }
-                    catch { p.Dispose(); return false; }
-                });
-            }
-            catch { }
 
             var audioReady = obsPath is not null
                 && File.Exists(Path.Combine(AppPaths.TemplatesDirectory, "basic", "profiles", "Discord Share", "basic.ini"));
 
             return new DetectionState(
                 ObsReady: obsPath is not null,
-                GameRunning: game is not null,
-                ResonanceLogsRunning: logs is not null,
+                GameRunning: game.Running,
+                ResonanceLogsRunning: logs.Running,
                 AvatarReady: avatarReady,
                 AudioIsolationReady: audioReady,
-                VTubeStudioRunning: vtubeRunning,
+                VTubeStudioRunning: IsVTubeStudioRunning(),
                 AitumReady: aitumReady,
                 ObsPath: obsPath,
-                GamePath: SafeProcessPath(game),
-                ResonanceLogsPath: SafeProcessPath(logs));
+                GamePath: game.Path,
+                ResonanceLogsPath: logs.Path);
         });
     }
 
-    private static Process? FindProcess(string processName)
+    private static (bool Running, string? Path) GetProcessInfo(string processName)
     {
-        try { return Process.GetProcessesByName(processName).FirstOrDefault(); }
-        catch { return null; }
+        Process[] processes;
+        try { processes = Process.GetProcessesByName(processName); }
+        catch { return (false, null); }
+
+        try
+        {
+            if (processes.Length == 0) return (false, null);
+            string? path = null;
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (!process.HasExited && path is null) path = process.MainModule?.FileName;
+                }
+                catch { }
+            }
+            return (true, path);
+        }
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
+        }
     }
 
-    private static string? SafeProcessPath(Process? process)
+    private static bool IsVTubeStudioRunning()
     {
-        if (process is null) return null;
-        try { return process.MainModule?.FileName; }
-        catch { return null; }
-        finally { process.Dispose(); }
+        Process[] processes;
+        try { processes = Process.GetProcesses(); }
+        catch { return false; }
+
+        try
+        {
+            foreach (var process in processes)
+            {
+                try
+                {
+                    var name = process.ProcessName.Replace(" ", string.Empty, StringComparison.Ordinal);
+                    if (name.Contains("VTubeStudio", StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
+        }
     }
 }
