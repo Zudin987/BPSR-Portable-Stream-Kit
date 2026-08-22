@@ -284,11 +284,16 @@ jobs:
           )
           foreach($f in $required){if(-not(Test-Path $f)){throw "Missing release file: $f"}}
           @"
-          StreamKit v2.0.4
+          StreamKit v2.1.0
 
           1. Extract the whole ZIP and run BPSRStreamKit.exe. Windows will ask for administrator permission; allow it so StreamKit can reliably inspect/capture elevated games and control its portable OBS process.
           2. Open the game you want to stream and press Find games if needed.
           3. Choose an Avatar, Frame Style and Stream Mode.
+
+          Returning users / Quick Launch:
+          - After one successful share/stream, StreamKit opens a compact Quick Launch card on future starts and reuses your remembered game, avatar, frame and destination.
+          - Existing v2.0.4 users with a remembered game and the portable OBS setup are recognized automatically.
+          - Use Customize setup to return to the full 3-step screen. A Quick Launch button appears in the header so you can switch back immediately.
 
           Full VTuber first use:
           - StreamKit installs Spout2 into its portable OBS automatically.
