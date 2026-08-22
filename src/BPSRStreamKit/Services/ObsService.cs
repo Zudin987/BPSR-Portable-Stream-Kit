@@ -62,6 +62,27 @@ public sealed class ObsService
         Process.Start(startInfo);
     }
 
+    public void LaunchAvatarPreview(StreamTheme theme)
+    {
+        var obsExe = AppPaths.FindObsExe() ?? throw new FileNotFoundException("Portable OBS is not ready yet.");
+        EnsureCleanRestart();
+        ApplyTheme(theme, AvatarMode.VTubeStudio, null);
+        AudioPrivacyService.HardenPortableObsConfig();
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = obsExe,
+            WorkingDirectory = Path.GetDirectoryName(obsExe)!,
+            UseShellExecute = true
+        };
+        startInfo.ArgumentList.Add("--portable");
+        startInfo.ArgumentList.Add("--disable-shutdown-check");
+        startInfo.ArgumentList.Add("--disable-updater");
+        AddWebSocketArguments(startInfo);
+        AddSelection(startInfo, "Discord Share", "BPSR Horizontal", "Game Clean");
+        Process.Start(startInfo);
+    }
+
     public void LaunchAitumBootstrap(GameTarget game, StreamTheme theme, AvatarMode avatarMode, VTubeCaptureTarget? vTubeTarget)
     {
         var obsExe = AppPaths.FindObsExe() ?? throw new FileNotFoundException("Portable OBS is not ready yet.");
