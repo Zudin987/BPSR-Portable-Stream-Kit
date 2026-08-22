@@ -1,4 +1,3 @@
-using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using BPSRStreamKit.Infrastructure;
@@ -23,7 +22,7 @@ public static class AudioPrivacyService
             var file = Path.Combine(sceneRoot, name);
             if (!File.Exists(file)) continue;
             try { HardenSceneCollection(file); }
-            catch { /* Never destroy an otherwise usable StreamKit collection because of one malformed optional source. */ }
+            catch { /* A malformed optional source must not destroy an otherwise usable collection. */ }
         }
     }
 
@@ -32,8 +31,8 @@ public static class AudioPrivacyService
         var root = JsonNode.Parse(File.ReadAllText(file))?.AsObject();
         if (root is null) return;
 
-        // OBS desktop audio is global. StreamKit never needs it because the chosen game is captured
-        // directly with application/game audio. Removing these keys prevents Discord/system audio leaks.
+        // Desktop audio is global. StreamKit uses direct selected-game audio instead, so deleting
+        // these entries prevents Discord/system notifications from leaking to public outputs.
         for (var i = 1; i <= 4; i++) root.Remove($"DesktopAudioDevice{i}");
         for (var i = 2; i <= 4; i++) root.Remove($"AuxAudioDevice{i}");
 
@@ -55,10 +54,10 @@ public static class AudioPrivacyService
                 var name = source["name"]?.GetValue<string>() ?? string.Empty;
                 var kind = string.IsNullOrWhiteSpace(id) ? versionedId : id;
 
-                if (kind.Contains("wasapi_output_capture", StringComparison.OrdinalIgnoreCase) ||
-                    kind.Contains("wasapi_process_output_capture", StringComparison.OrdinalIgnoreCase) ||
-                    (name.Contains("Discord", StringComparison.OrdinalIgnoreCase) &&
-                     kind.Contains("audio", StringComparison.OrdinalIgnoreCase)))
+                if (kind.Contains("wasapi_output_capture", StringComparison.OrdinalIgnoreCase)
+                    || kind.Contains("wasapi_process_output_capture", StringComparison.OrdinalIgnoreCase)
+                    || (name.Contains("Discord", StringComparison.OrdinalIgnoreCase)
+                        && kind.Contains("audio", StringComparison.OrdinalIgnoreCase)))
                 {
                     source["muted"] = true;
                     source["mixers"] = 0;
@@ -77,7 +76,7 @@ public static class AudioPrivacyService
             }
         }
 
-        File.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        AtomicFile.WriteAllText(file, root.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
     }
 
     private static void RepairPortableAssetPaths(JsonArray sources, string sceneFile)
@@ -136,12 +135,14 @@ public static class AudioPrivacyService
             if (avatar is null) return;
             var settings = avatar["settings"]?.AsObject() ?? new JsonObject();
             avatar["settings"] = settings;
+            var talkA = Path.Combine(avatarDirectory, "talk_a.png");
+            var talkB = Path.Combine(avatarDirectory, "talk_b.png");
             settings["path_idle"] = ObsPath(Path.Combine(avatarDirectory, "idle.png"));
             settings["path_blink"] = ObsPath(Path.Combine(avatarDirectory, "blink.png"));
             settings["path_action"] = ObsPath(Path.Combine(avatarDirectory, "action.png"));
-            settings["path_talk_1"] = ObsPath(Path.Combine(avatarDirectory, "talk_a.png"));
-            settings["path_talk_2"] = ObsPath(Path.Combine(avatarDirectory, "talk_a.png"));
-            settings["path_talk_3"] = ObsPath(Path.Combine(avatarDirectory, "talk_a.png"));
+            settings["path_talk_1"] = ObsPath(talkA);
+            settings["path_talk_2"] = ObsPath(File.Exists(talkB) ? talkB : talkA);
+            settings["path_talk_3"] = ObsPath(talkA);
             settings["custom_avatars_path"] = ObsPath(avatarDirectory);
         }
 
