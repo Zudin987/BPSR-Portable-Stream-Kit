@@ -5,10 +5,8 @@ namespace BPSRStreamKit;
 
 public partial class MainWindow
 {
-    // Register a Button class handler before MainWindow instances are constructed.
-    // WPF invokes class handlers before XAML instance Click handlers, so this can
-    // safely replace the fragile async-void "I'm finished" path without changing
-    // the rest of the existing setup screen.
+    // One class-level router runs before the older XAML click handlers. This lets v2.2
+    // replace the fragile start/stop/setup paths without allowing both handlers to fire.
     private static readonly bool PlatformSetupGuardRegistered = RegisterPlatformSetupGuard();
 
     private static bool RegisterPlatformSetupGuard()
@@ -23,66 +21,82 @@ public partial class MainWindow
     private static async void PlatformSetupButtonClassHandler(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button) return;
-
-        var label = button.Content?.ToString();
-        if (!string.Equals(label, "I’m finished", StringComparison.Ordinal)
-            && !string.Equals(label, "I'm finished", StringComparison.Ordinal))
-            return;
-
         if (Window.GetWindow(button) is not MainWindow window) return;
 
-        // Prevent the older XAML async-void handler from also running.
+        Func<Task>? action = null;
+        string? failureTitle = null;
+
+        if (ReferenceEquals(button, window.MainActionButton))
+        {
+            action = window.StartV220Async;
+            failureTitle = "StreamKit couldn’t start";
+        }
+        else if (ReferenceEquals(button, window.StartingSoonButton))
+        {
+            action = () => window.SwitchSceneV220Async("Starting Soon");
+            failureTitle = "Couldn’t switch scenes";
+        }
+        else if (ReferenceEquals(button, window.BrbButton))
+        {
+            action = () => window.SwitchSceneV220Async("BRB");
+            failureTitle = "Couldn’t switch scenes";
+        }
+        else if (ReferenceEquals(button, window.LiveButton))
+        {
+            action = () => window.SwitchSceneV220Async("Game Clean");
+            failureTitle = "Couldn’t switch scenes";
+        }
+        else if (window._bpsrSceneButtonV220 is not null && ReferenceEquals(button, window._bpsrSceneButtonV220))
+        {
+            action = () => window.SwitchSceneV220Async("BPSR");
+            failureTitle = "Couldn’t switch scenes";
+        }
+        else if (ReferenceEquals(button, window.StopStreamButton))
+        {
+            action = window.StopV220Async;
+            failureTitle = "Couldn’t stop cleanly";
+        }
+        else if (ReferenceEquals(button, window.CheckAvatarButton))
+        {
+            action = window.CheckAvatarV220Async;
+            failureTitle = "Avatar check needs attention";
+        }
+        else
+        {
+            var label = button.Content?.ToString();
+            if (string.Equals(label, "Check TikTok", StringComparison.Ordinal)
+                || string.Equals(label, "I’m finished", StringComparison.Ordinal)
+                || string.Equals(label, "I'm finished", StringComparison.Ordinal))
+            {
+                action = window.CheckTikTokV220Async;
+                failureTitle = "Couldn’t check TikTok";
+            }
+            else if (string.Equals(label, "Open account setup", StringComparison.Ordinal)
+                     || string.Equals(label, "Open streaming engine", StringComparison.Ordinal))
+            {
+                action = window.OpenObsSetupV220Async;
+                failureTitle = "Couldn’t open the streaming engine";
+            }
+        }
+
+        if (action is null) return;
+
+        // Stop the legacy instance click handler. Only the v2.2 controller may perform the action.
         e.Handled = true;
-        await window.FinishPlatformSetupSafelyAsync();
-    }
-
-    private async Task FinishPlatformSetupSafelyAsync()
-    {
-        if (_busy) return;
-
         try
         {
-            HideProblem();
-            SetBusy(true);
-            FooterStatus.Text = "Checking Twitch / TikTok setup…";
-
-            // Check while OBS is still open. If setup is incomplete, leave it open
-            // so the user can fix the output immediately instead of reopening it.
-            await Task.Delay(400);
-
-            if (!_setup.HasAitumStreamOutput())
-            {
-                _platformSetupNeeded = true;
-                PlatformSetupPanel.Visibility = Visibility.Visible;
-                ShowProblem(
-                    "TikTok setup is not finished yet",
-                    "StreamKit still can’t find the TikTok Vertical output. Leave the account setup window open, finish the TikTok Vertical output, then click I’m finished again.");
-                FooterStatus.Text = "Waiting for the TikTok Vertical output";
-                RestorePortableObsWindow();
-                return;
-            }
-
-            // Only close OBS after the configured output has been confirmed.
-            try { _obs.Stop(); } catch { }
-            await Task.Delay(500);
-
-            _platformSetupNeeded = false;
-            PlatformSetupPanel.Visibility = Visibility.Collapsed;
-            HideProblem();
-            FooterStatus.Text = "Accounts saved · press Go Live Everywhere when ready";
+            await action();
         }
         catch (Exception ex)
         {
-            _platformSetupNeeded = true;
-            PlatformSetupPanel.Visibility = Visibility.Visible;
-            ShowProblem("Couldn’t check the account setup", FriendlyError(ex));
-            FooterStatus.Text = "Account setup check failed · your settings were kept";
-            try { RestorePortableObsWindow(); } catch { }
-        }
-        finally
-        {
-            try { SetBusy(false); } catch { }
-            try { await RefreshStatusAsync(); } catch { }
+            try
+            {
+                window.ShowProblem(failureTitle ?? "Something needs attention", FriendlyError(ex));
+                window.FooterStatus.Text = "StreamKit kept the current setup safe";
+                window.SetBusy(false);
+                window.UpdateV220ControlsUi();
+            }
+            catch { }
         }
     }
 }

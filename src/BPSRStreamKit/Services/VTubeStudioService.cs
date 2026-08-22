@@ -13,6 +13,9 @@ public sealed record VTubeCaptureTarget(string WindowTitle, string WindowClass, 
 public sealed class VTubeStudioService
 {
     public const int SteamAppId = 1325860;
+    private static readonly SemaphoreSlim LaunchGate = new(1, 1);
+    private static readonly object LaunchSync = new();
+    private static DateTime _lastLaunchRequestUtc = DateTime.MinValue;
 
     public bool IsRunning()
     {
@@ -32,34 +35,80 @@ public sealed class VTubeStudioService
 
     public void Launch()
     {
-        // A stale/background process should not block the beginner flow. If there is no usable
-        // visible VTube Studio window, ask Steam to launch/restore the app again.
         if (TryGetCaptureTarget() is not null) return;
-        LaunchThroughSteam();
+        if (IsRunning()) return;
+        RequestSteamLaunchIfAllowed(TimeSpan.FromSeconds(15));
     }
 
     public async Task<VTubeCaptureTarget> LaunchAndWaitAsync(TimeSpan? timeout = null)
     {
-        var existing = TryGetCaptureTarget();
-        if (existing is not null) return existing;
-
-        var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(45));
-        var nextLaunchAttempt = DateTime.MinValue;
-        while (DateTime.UtcNow < until)
+        await LaunchGate.WaitAsync();
+        try
         {
-            if (DateTime.UtcNow >= nextLaunchAttempt)
+            var existing = TryGetCaptureTarget();
+            if (existing is not null) return existing;
+
+            var total = timeout ?? TimeSpan.FromSeconds(60);
+            var until = DateTime.UtcNow + total;
+            var recoveryAttemptUtc = DateTime.UtcNow + TimeSpan.FromSeconds(25);
+            var recoveryUsed = false;
+
+            if (!IsRunning()) RequestSteamLaunchIfAllowed(TimeSpan.FromSeconds(15));
+
+            while (DateTime.UtcNow < until)
             {
-                LaunchThroughSteam();
-                nextLaunchAttempt = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+                var target = TryGetCaptureTarget();
+                if (target is not null) return target;
+
+                // If the process is already starting, wait for it instead of repeatedly asking Steam
+                // to launch the same app. One late recovery request is allowed for a stuck background process.
+                if (!IsRunning())
+                {
+                    RequestSteamLaunchIfAllowed(TimeSpan.FromSeconds(15));
+                }
+                else if (!recoveryUsed && DateTime.UtcNow >= recoveryAttemptUtc)
+                {
+                    recoveryUsed = true;
+                    RequestSteamLaunchIfAllowed(TimeSpan.FromSeconds(25), allowWhenRunning: true);
+                }
+
+                await Task.Delay(750);
             }
 
-            await Task.Delay(500);
-            var target = TryGetCaptureTarget();
-            if (target is not null) return target;
+            throw new InvalidOperationException(
+                "VTube Studio is taking too long to show its window. Leave it open, wait until your model appears, then try again.");
         }
+        finally
+        {
+            LaunchGate.Release();
+        }
+    }
 
-        throw new InvalidOperationException(
-            "VTube Studio did not open a detectable window. Install/open VTube Studio in Steam, choose a Live2D model and webcam once, then retry Full VTuber mode.");
+    private static void RequestSteamLaunchIfAllowed(TimeSpan minimumGap, bool allowWhenRunning = false)
+    {
+        lock (LaunchSync)
+        {
+            if (!allowWhenRunning && IsAnyVTubeProcessRunning()) return;
+            if (DateTime.UtcNow - _lastLaunchRequestUtc < minimumGap) return;
+            _lastLaunchRequestUtc = DateTime.UtcNow;
+        }
+        LaunchThroughSteam();
+    }
+
+    private static bool IsAnyVTubeProcessRunning()
+    {
+        try
+        {
+            foreach (var process in Process.GetProcesses())
+            {
+                using (process)
+                {
+                    if (LooksLikeVTubeStudio(process)) return true;
+                }
+            }
+        }
+        catch { }
+        return false;
     }
 
     private static void LaunchThroughSteam()
@@ -67,9 +116,6 @@ public sealed class VTubeStudioService
         var uri = $"steam://rungameid/{SteamAppId}";
         try
         {
-            // StreamKit intentionally runs elevated. Route the Steam URI through Explorer so an
-            // already-running normal-user Steam/VTube Studio session is reused instead of trying
-            // to create an unnecessarily elevated VTube Studio process.
             Process.Start(new ProcessStartInfo
             {
                 FileName = "explorer.exe",
@@ -79,7 +125,8 @@ public sealed class VTubeStudioService
         }
         catch
         {
-            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+            try { Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true }); }
+            catch { }
         }
     }
 
