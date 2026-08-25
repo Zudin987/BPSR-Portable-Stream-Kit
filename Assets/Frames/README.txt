@@ -1,16 +1,16 @@
-HOW TO USE THE FRAME IN OBS
-===========================
+STREAM FRAMES
+=============
 
-1. In OBS Sources, click + -> Image.
-2. Browse to this Frames folder.
-3. Pick 01_Minimal_Thin_1080p.png.
-4. Right-click the source -> Transform -> Fit to Screen.
-5. Keep the frame ABOVE BPSR and DPS Meter in the Sources list.
+Included assets:
+- 01_Minimal_Thin_1080p.png — thin 1920x1080 frame
+- 02_Sakura_Full_Overlay.png — ornate overlay
+- 03_Showcase_Character_Overlay.png — character showcase overlay
+- 04_DPS_Panel.png — DPS/stats panel
+- 05_TikTok_Minimal_1080x1920.png — vertical TikTok frame
 
-Recommended source order (top to bottom):
-  Frame
-  FloodTuber Avatar
-  DPS Meter
-  BPSR
+Manual OBS use:
+1. Add the frame as an Image source.
+2. Fit it to the canvas.
+3. Keep it above the game/avatar/HUD sources.
 
-The center of the PNG is transparent, so the game remains visible.
+The frame center is transparent so gameplay remains visible.
