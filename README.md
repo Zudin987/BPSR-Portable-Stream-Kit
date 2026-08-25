@@ -2,6 +2,8 @@
 
 A portable Windows launcher for game capture, VTuber avatars, Discord screen share, and optional Twitch/TikTok streaming. StreamKit prepares the OBS setup so normal use stays focused on **game → avatar → destination → start**.
 
+**Website:** https://zudin987.github.io/projects/streamkit/
+
 > **Quick start:** Extract the complete release ZIP, run `BPSRStreamKit.exe`, open your game, choose an avatar/frame/destination, then press the main start button. Returning users can reuse the remembered setup through **Quick Launch**.
 
 ## Stream modes
