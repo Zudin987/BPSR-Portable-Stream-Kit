@@ -1,26 +1,8 @@
-Profile B - Chibi Doctor
+PROFILE B — CHIBI DOCTOR
 ========================
 
-Avatar:
-- idle.png
-- talk_a.png
-- blink.png
-- action.png
+This theme contains its matching avatar plus horizontal/vertical frame and intermission artwork when present in the release package.
 
-Frames:
-- Discord_1080p.png       (1920x1080 transparent PNG)
-- TikTok_1080x1920.png    (1080x1920 transparent PNG)
+Avatar names use the normal StreamKit mapping (`idle.png`, `talk_a.png`, `blink.png`, `action.png`). Starting Soon / BRB artwork is game-neutral and keeps the avatar out of intermission screens.
 
-Screens:
-- Starting_1080p.jpg
-- BRB_1080p.jpg
-- Starting_TikTok_1080x1920.jpg
-- BRB_TikTok_1080x1920.jpg
-
-StreamKit v0.3.5 applies the matching avatar for live scenes, richer edge-hugging medical frames, and avatar-free Starting Soon / BRB art when Profile B is selected.
-
-Text rules:
-- Starting screens: STARTING SOON only, smaller centered title
-- BRB screens: BE RIGHT BACK only, smaller centered title
-
-The intermission artwork is game-neutral and contains no character/avatar image.
+StreamKit applies the matching theme assets automatically when this profile is selected.
