@@ -1,19 +1,15 @@
 CUSTOM FLOODTUBER AVATAR
-=========================
+========================
 
-Drop your PNG/APNG/WebP/GIF avatar assets here.
+Bundled mapping:
+- idle.png   — normal / silent pose
+- talk_a.png — light talking
+- talk_b.png — stronger talking
+- blink.png  — blink expression
+- action.png — optional action/hotkey expression
 
-Recommended exact PNG names:
-  idle.png
-  talk_a.png
-  talk_b.png
-  talk_c.png
-  blink.png
-  action.png
+Do not rename bundled files unless you also remap them in FloodTuber.
 
-Minimum simple setup:
-  idle.png
-  talk_a.png
+For a custom avatar, put PNG/APNG/WebP/GIF assets here. Minimum setup is `idle.png` + `talk_a.png`; optional names include `talk_b.png`, `talk_c.png`, `blink.png`, and `action.png`.
 
-Then choose this folder as the custom avatar directory in the
-"Flood Tuber Avatar" source properties inside OBS.
+Use this folder as the custom avatar directory in the FloodTuber source settings. Bundled PNGs already have transparent backgrounds.
